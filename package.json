@@ -1,0 +1,18 @@
+{
+  "name": "synopsis",
+  "version": "0.1.0",
+  "description": "Efficiently computes synopsis of delta series.",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://www.github.com/allain/synopsis"
+  },
+  "author": "Allain Lalonde <allain.lalonde@gmail.com>",
+  "license": "ISC",
+  "devDependencies": {
+    "jiff": "^0.7.0"
+  }
+}
