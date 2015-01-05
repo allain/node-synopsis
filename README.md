@@ -1,8 +1,8 @@
 #synposis
 
-Synopsis solves particular problem I have of efficiently computing the effective delta between two points in time when all you are given is incremental updates.
+Synopsis is a tool computing the effective deltas two points in time when all you are given is incremental updates.
 
-The approach I'm taking is to take a granularity N, and then merging N consecutive deltas together into deltaN.
+The approach I'm taking is to take a granularity N, and then merge N consecutive deltas together into deltaN.
 
 Then I do the same for NxN, NxNxN, etc. until the granularity is greater than the number of deltas.
 
