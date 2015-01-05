@@ -1,15 +1,32 @@
 module.exports = Synopsis;
 
 var assert = require('assert');
+var async = require('async');
+
+var EventEmitter = require('events').EventEmitter;
+
+var inherits = require('util').inherits;
+
+var noop = function() {};
+
+
+inherits(Synopsis, EventEmitter);
 
 function Synopsis(options) {
-  options = options || {};
+  if (!(this instanceof Synopsis)) {
+    return new Synopsis(options);
+  }
+
+  var self = this;
+
+  EventEmitter.call(this);
+
+  assert(typeof options === 'object');
 
   var granularity = options.granularity || 5;
-  var count = options.count || 0;
 
+  var count = 0;
 
-  var updates = [];
   var deltaCache = this.deltaCache = {};
   var differ = options.differ;
   var patcher = options.patcher;
@@ -17,92 +34,167 @@ function Synopsis(options) {
   var store = options.store || (function() {
     var cache = [];
     return {
-      get: function(key) {
-        var parts = key.split('-');
-        return cache[parts[0]] && cache[parts[0]][parts[1]];
+      get: function(key, cb) {
+        return cb(null, cache[key]);
       },
-      set: function(key, value) {
-        var parts = key.split('-');
-        cache[parts[0]] = cache[parts[0]] || {};
-        cache[parts[0]][parts[1]] = value;
+      set: function(key, value, cb) {
+        cache[key] = value;
+        cb();
       }
     };
   })();
 
-  this.sum = function(index) {
+  function sum(index, cb) {
+    if (typeof cb === 'undefined') {
+      cb = index;
+      index = count;
+    }
+
     if (typeof index === 'undefined') {
       index = count;
     }
 
     if (index === 0) {
-      return options.start;
+      return cb(null, options.start);
     }
 
-    var delta = this.delta(0, index);
+    delta(0, index, function(err, d) {
+      if (err) return cb(err);
 
-    return patcher(options.start, delta);
-  };
+      cb(null, patcher(options.start, d));
+    });
+  }
 
-  this.patch = function(delta) {
-    updates.push([delta, ++count]);
+  function patch(delta, cb) {
+    cb = cb || noop;
 
+    store.set(++ count + '-1', delta, function(err) {
+      if (err) return cb(err);
+
+      updateAggregates(cb);
+    });
+  }
+
+  function updateAggregates(cb) {
     var scale = granularity;
-    while (scale <= count && count % scale === 0) {
-      store.set(count + '-' + scale, differ(this.sum(count - scale), this.sum(count)));
-      scale *= granularity;
-    }
 
-    return count;
-  };
+    async.whilst(function() {
+      return scale <= count && count % scale === 0;
+    }, function(next) {
+      async.parallel({
+        before: function(cb) {
+          return sum(count - scale, cb);
+        },
+        after: function(cb) {
+          return sum(count, cb);
+        }
+      }, function(err, sums) {
+        store.set(count + '-' + scale, differ(sums.before, sums.after), function(err) {
+          scale *= granularity;
+          next();
+        });
+      });
+    }, function(err) {
+      cb();
+    });
+  }
 
-  this.collectDeltas = function(idx1, idx2) {
+  function collectDeltas(idx1, idx2, cb) {
     var result = [];
 
-    assert(idx1 <= idx2, 'delta in incorrect order');
+    if (idx2 > count) return cb(new Error('index out of range: ' + idx2));
+    if (idx1 > idx2) return cb(new Error('delta in incorrect order'));
 
-    if (idx1 === idx2) return result;
+    if (idx1 === idx2) return cb(null, []);
 
     var idx = idx2;
-    while (idx > idx1) {
-      if (idx % granularity !== 0) {
-        result.push(updates[--idx][0]);
-        continue;
+
+    async.whilst(function() {
+      return idx > idx1;
+    }, function(next) {
+      if (idx === 0) {
+        idx --;
+        return next();
+      } else if (idx % granularity !== 0) {
+        store.get(idx -- + '-1', function(err, delta) {
+          result.push(delta);
+          return next();
+        });
+        return;
       }
 
       var deltaSize = idx2 - idx1;
       var deltaScale = Math.pow(granularity, Math.floor(Math.log(deltaSize)/Math.log(granularity)));
 
       var cached;
-      do {
-        //TODO: Support this result being a Promise
-        cached = (idx % deltaScale === 0) && store.get(idx + '-' + deltaScale);
-        if (cached) break;
 
-        deltaScale /= granularity;
-      } while (!cached && deltaScale > 1);
+      async.doWhilst(function(next) {
+        if (idx % deltaScale === 0) {
+          store.get(idx + '-' + deltaScale, function(err, c) {
+            if (c) {
+              cached = c;
+            } else {
+              deltaScale /= granularity;
+            }
+            next();
+          });
+        } else {
+          deltaScale /= granularity;
+          next();
+        }
+      }, function() {
+        return !cached && deltaScale > 1;
+      }, function(err) {
+        if (err) return next(err);
+        if (cached) {
+          result.push(cached);
+          idx -= deltaScale;
+          next();
+        } else {
+          store.get(idx -- + '-1', function(err, delta) {
+            result.push(delta);
+            next();
+          });
+        }
+      });
+    }, function(err) {
+      cb(err, result.reverse());
+    });
+  }
 
-      if (cached) {
-        result.push(cached);
-        idx -= deltaScale;
-      } else {
-        result.push(updates[--idx][0]);
-      }
-    }
-
-    return result.reverse();
-  };
-
-  this.delta = function(idx1, idx2) {
-    if (typeof idx2 === 'undefined') {
+  function delta(idx1, idx2, cb) {
+    if (typeof cb === 'undefined') {
+      cb = idx2;
       idx2 = count;
     }
-    var deltas = this.collectDeltas(idx1, idx2);
-    var start = this.sum(idx1);
-    var result = start;
-    deltas.forEach(function(delta) {
-      result = patcher(result, delta);
-    });
 
-    return differ(start, result);
-  };
+    collectDeltas(idx1, idx2, function(err, deltas) {
+      if (err) return cb(err);
+
+      sum(idx1, function(err, start) {
+        if (err) return cb(err);
+
+        var result = start;
+
+        deltas.forEach(function(delta) {
+          result = patcher(result, delta);
+        });
+
+        cb(null, differ(start, result));
+      });
+    });
+  }
+
+  store.get('count', function(err, c) {
+    count = c || 0;
+    process.nextTick(function() {
+      self.emit('ready');
+    });
+  });
+
+
+  this.sum = sum;
+  this.delta = delta;
+  this.patch = patch;
+  this.collectDeltas = collectDeltas;
 }
