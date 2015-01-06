@@ -68,26 +68,29 @@ function Synopsis(options) {
   function patch(delta, cb) {
     cb = cb || noop;
 
-    sum(function(err, s) {
-      try {
-        patcher(s, delta);
-        
-        store.set(++ count + '-1', delta, function(err) {
+    testNewPatch(delta, function(err) {
+      if (err) return cb(err);
+
+      // TODO: make these two set operations atomic
+      store.set(++ count + '-1', delta, function(err) {
+        if (err) return cb(err);
+
+        store.set('count', count, function(err) {
           if (err) return cb(err);
 
-          // TODO: make these two set operations atomic
-          store.set('count', count, function(err) {
-            if (err) return cb(err);
-
-            updateAggregates(function(err) {
-              if (err) return cb(err);
-
-              cb();
-            });
-          });
+          updateAggregates(cb);
         });
+      });
+    });
+  }
+
+  function testNewPatch(patch, cb) {
+    sum(function(err, s) {
+      if (err) return cb(err);
+      try {
+        patcher(s, delta);
+        cb();
       } catch(e) {
-        //invalid patch
         return cb(new Error('Invalid Patch'));
       }
     });
