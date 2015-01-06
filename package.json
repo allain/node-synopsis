@@ -1,6 +1,6 @@
 {
   "name": "synopsis",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Efficiently computes synopsis of delta series.",
   "main": "index.js",
   "scripts": {
