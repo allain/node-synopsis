@@ -156,22 +156,6 @@ describe('Synopsis', function() {
     });
   });
 
-  it('supports delta from a change number forward', function(done) {
-    var ns = [Math.random(), Math.random(), Math.random()];
-    async.eachSeries(ns, s.patch, function(err) {
-      assert(!err, err);
-
-      async.parallel({
-        d2: function(cb) { s.delta(2, cb); },
-        d2t3: function(cb) { s.delta(2, 3, cb); }
-      }, function(err, r) {
-        assert.equal(r.d2, ns[2]);
-        assert.equal(r.d2t3, ns[2]);
-        done();
-      });
-    });
-  });
-
   var hardCount = 20000;
   it('has reasonable speed for ' + hardCount + ' patches', function(done) {
     this.timeout(1000);
@@ -183,6 +167,32 @@ describe('Synopsis', function() {
         done();
       });
     });
+  });
+
+  it('rollup works', function(done) {
+    async.series([
+      function(cb) {
+        patchN1s(10, cb);
+      },
+      function(cb) {
+        s.rollup(5, function(err, result) {
+          assert.deepEqual(result, {
+            patch: 5,
+            end: 10
+          });
+          cb();
+        });
+      },
+      function(cb) {
+        s.rollup(10, function(err, result) {
+          assert.deepEqual(result, {
+            patch: 0,
+            end: 10
+          });
+          cb();
+        });
+      }
+    ], done);
   });
 
   it('works with non-trivial deltas', function(done) {
@@ -212,7 +222,7 @@ describe('Synopsis', function() {
           s.collectDeltas(0, 1, cb);
         },
         s1: function(cb) { s.sum(1, cb); },
-        d1t3: function(cb) { s.delta(1,3, cb); }
+        d1t3: function(cb) { s.delta(1, 3, cb); }
       }, function(err, r) {
         assert.deepEqual({}, r.s0);
         assert.deepEqual([[{op: 'add', path: '/a', value: 1}]], r.d1);

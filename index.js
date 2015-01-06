@@ -185,6 +185,16 @@ function Synopsis(options) {
     });
   }
 
+  function rollup(from, cb) {
+    var c = count;
+    var patch = delta(from, c, function(err, delta) {
+      cb(null, {
+        patch: delta,
+        end: c
+      });
+    });
+  }
+
   store.get('count', function(err, c) {
     count = c || 0;
     process.nextTick(function() {
@@ -197,4 +207,5 @@ function Synopsis(options) {
   this.delta = delta;
   this.patch = patch;
   this.collectDeltas = collectDeltas;
+  this.rollup = rollup;
 }
