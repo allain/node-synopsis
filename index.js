@@ -68,15 +68,28 @@ function Synopsis(options) {
   function patch(delta, cb) {
     cb = cb || noop;
 
-    store.set(++ count + '-1', delta, function(err) {
-      if (err) return cb(err);
+    sum(function(err, s) {
+      try {
+        patcher(s, delta);
+        
+        store.set(++ count + '-1', delta, function(err) {
+          if (err) return cb(err);
 
-      // TODO: make these two set operations atomic
-      store.set('count', count, function(err) {
-        if (err) return cb(err);
+          // TODO: make these two set operations atomic
+          store.set('count', count, function(err) {
+            if (err) return cb(err);
 
-        updateAggregates(cb);
-      });
+            updateAggregates(function(err) {
+              if (err) return cb(err);
+
+              cb();
+            });
+          });
+        });
+      } catch(e) {
+        //invalid patch
+        return cb(new Error('Invalid Patch'));
+      }
     });
   }
 
@@ -202,11 +215,8 @@ function Synopsis(options) {
 
   store.get('count', function(err, c) {
     count = c || 0;
-    process.nextTick(function() {
-      self.emit('ready');
-    });
+    self.emit('ready');
   });
-
 
   this.sum = sum;
   this.delta = delta;
