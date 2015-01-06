@@ -72,9 +72,11 @@ function Synopsis(options) {
       if (err) return cb(err);
 
       // TODO: make these two set operations atomic
-      store.set('count', count);
+      store.set('count', count, function(err) {
+        if (err) return cb(err);
 
-      updateAggregates(cb);
+        updateAggregates(cb);
+      });
     });
   }
 
