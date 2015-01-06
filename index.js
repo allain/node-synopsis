@@ -71,6 +71,9 @@ function Synopsis(options) {
     store.set(++ count + '-1', delta, function(err) {
       if (err) return cb(err);
 
+      // TODO: make these two set operations atomic
+      store.set('count', count);
+
       updateAggregates(cb);
     });
   }
