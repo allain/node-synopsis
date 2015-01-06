@@ -70,13 +70,15 @@ describe('Synopsis', function() {
     });
   });
 
+
+
   it('sum behaves as expected', function(done) {
     async.eachSeries(_.range(1,5), function(n, cb) {
       s.patch(n, cb);
     }, function(err) {
       assert(!err, err);
 
-      /*async.parallel({
+      async.parallel({
         s1: function(cb) { s.sum(1, cb); },
         s2: function(cb) { s.sum(2, cb); },
         s3: function(cb) { s.sum(3, cb); },
@@ -97,10 +99,10 @@ describe('Synopsis', function() {
         assert.equal(r.s2 - r.s1, r.d12);
         assert.equal(r.s3 - r.s1, r.d13);
         assert.equal(r.s4 - r.s1, r.d14);
-        assert.equal(r.s4 - r.s2, r.d24);*/
+        assert.equal(r.s4 - r.s2, r.d24);
 
-      done();
-      //});
+        done();
+      });
     });
   });
 
