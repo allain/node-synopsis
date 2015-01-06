@@ -169,6 +169,15 @@ describe('Synopsis', function() {
     });
   });
 
+  it('emits patched events', function(done) {
+    s.on('patched', function(patch) {
+      assert.equal(patch, 1);
+      done();
+    });
+
+    s.patch(1);
+  });
+
   it('rollup works', function(done) {
     async.series([
       function(cb) {

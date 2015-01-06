@@ -78,6 +78,9 @@ function Synopsis(options) {
         store.set('count', count, function(err) {
           if (err) return cb(err);
 
+          // At this point it is safe to use it because it has been persisted
+          self.emit('patched', delta);
+
           updateAggregates(cb);
         });
       });
