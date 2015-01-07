@@ -7,9 +7,6 @@ var EventEmitter = require('events').EventEmitter;
 
 var inherits = require('util').inherits;
 
-var noop = function() {};
-
-
 inherits(Synopsis, EventEmitter);
 
 function Synopsis(options) {
@@ -61,15 +58,19 @@ function Synopsis(options) {
     delta(0, index, function(err, d) {
       if (err) return cb(err);
 
-      cb(null, patcher(options.start, d));
+      setImmediate(function() {
+        cb(null, patcher(options.start, d));
+      });
     });
   }
 
   function patch(delta, cb) {
-    cb = cb || noop;
+    testNewPatch(delta, applyPatch);
 
-    testNewPatch(delta, function(err) {
-      if (err) return cb(err);
+    function applyPatch(err) {
+      if (err) {
+        return cb(err);
+      }
 
       // TODO: make these two set operations atomic
       store.set(++ count + '-1', delta, function(err) {
@@ -78,48 +79,58 @@ function Synopsis(options) {
         store.set('count', count, function(err) {
           if (err) return cb(err);
 
-          // At this point it is safe to use it because it has been persisted
-          self.emit('patched', delta);
+          updateAggregates(delta, function(err) {
+            if (err) return cb(err);
 
-          updateAggregates(cb);
+            self.emit('patched', delta);
+
+            cb();
+          });
         });
       });
-    });
+    }
   }
 
   function testNewPatch(patch, cb) {
     sum(function(err, s) {
       if (err) return cb(err);
+
       try {
-        patcher(s, delta);
-        cb();
+        patcher(s, patch);
       } catch(e) {
-        return cb(new Error('Invalid Patch'));
+        return cb(new Error('Invalid Patch ' + JSON.stringify(patch) + " to " + JSON.stringify(s)));
       }
+      cb();
     });
   }
 
-  function updateAggregates(cb) {
+  function updateAggregates(delta, cb) {
     var scale = granularity;
 
-    async.whilst(function() {
-      return scale <= count && count % scale === 0;
-    }, function(next) {
-      async.parallel({
-        before: function(cb) {
-          return sum(count - scale, cb);
-        },
-        after: function(cb) {
-          return sum(count, cb);
-        }
-      }, function(err, sums) {
-        store.set(count + '-' + scale, differ(sums.before, sums.after), function(err) {
-          scale *= granularity;
-          next();
+    if (scale > count || count % scale !== 0) {
+      return setImmediate(cb);
+    }
+
+    var after;
+    sum(count - 1, function(err, prevSum) {
+      if (err) return cb(err);
+
+      after = patcher(prevSum, delta);
+
+      async.whilst(function() {
+        return scale <= count && count % scale === 0;
+      }, function(next) {
+        sum(count - scale, function(err, before) {
+          if (err) return next(err);
+
+          store.set(count + '-' + scale, differ(before, after), function(err) {
+            if (err) return next(err);
+
+            scale *= granularity;
+            next();
+          });
         });
-      });
-    }, function(err) {
-      cb();
+      }, cb);
     });
   }
 
@@ -147,7 +158,7 @@ function Synopsis(options) {
         return;
       }
 
-      var deltaSize = idx2 - idx1;
+      var deltaSize = idx - idx1;
       var deltaScale = Math.pow(granularity, Math.floor(Math.log(deltaSize)/Math.log(granularity)));
 
       var cached;
@@ -173,6 +184,7 @@ function Synopsis(options) {
         if (cached) {
           result.push(cached);
           idx -= deltaScale;
+
           next();
         } else {
           store.get(idx -- + '-1', function(err, delta) {

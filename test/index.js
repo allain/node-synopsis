@@ -5,6 +5,30 @@ var _ = require('lodash');
 
 var Synopsis = require('../index.js');
 
+// Little utility that allows me to more easily test async functions
+var asyncAssert = {
+  equal: _.curry(function(generator, expected, cb) {
+    generator(function(err, actual) {
+      try {
+        assert.equal(actual, expected);
+        cb();
+      } catch(e) {
+        cb(e);
+      }
+    });
+  }),
+  deepEqual: _.curry(function(generator, expected, cb) {
+    generator(function(err, actual) {
+      try {
+        assert.equal(JSON.stringify(actual), JSON.stringify(expected));
+        cb();
+      } catch(e) {
+        cb(e);
+      }
+    });
+  })
+};
+
 describe('Synopsis', function() {
   var s;
   beforeEach(function(done) {
@@ -19,6 +43,10 @@ describe('Synopsis', function() {
         return after - before;
       }
     });
+
+    s.patch = _.curry(s.patch);
+    s.delta = _.curry(s.delta);
+    s.collectDeltas = _.curry(s.collectDeltas);
 
     done();
   });
@@ -39,8 +67,8 @@ describe('Synopsis', function() {
 
   it('computes sum when patches are added', function(done) {
     async.series([
-      function(cb) { s.patch(2, cb); },
-      function(cb) { s.patch(3, cb); },
+      s.patch(2),
+      s.patch(3),
       function(cb) {
         s.sum(function(err, sum) {
           assert(!err, err);
@@ -58,9 +86,7 @@ describe('Synopsis', function() {
     var deltaCount = 5;
     async.whilst(function() {
       return deltaCount--;
-    }, function(cb) {
-      s.patch(1, cb);
-    }, function(err) {
+    }, s.patch(1), function(err) {
       assert(!err, err);
       s.delta(0, 5, function(err, delta) {
         assert(!err, err);
@@ -73,61 +99,41 @@ describe('Synopsis', function() {
 
 
   it('sum behaves as expected', function(done) {
-    async.eachSeries(_.range(1,5), function(n, cb) {
-      s.patch(n, cb);
-    }, function(err) {
+    s.sum = _.curry(s.sum);
+
+    async.eachSeries(_.range(1,5),
+      s.patch,
+      function(err) {
       assert(!err, err);
 
-      async.parallel({
-        s1: function(cb) { s.sum(1, cb); },
-        s2: function(cb) { s.sum(2, cb); },
-        s3: function(cb) { s.sum(3, cb); },
-        s4: function(cb) { s.sum(4, cb); },
-        s: function(cb) { s.sum(cb); },
-        d12: function(cb) { s.delta(1, 2, cb); },
-        d13: function(cb) { s.delta(1, 3, cb); },
-        d14: function(cb) { s.delta(1, 4, cb); },
-        d24: function(cb) { s.delta(2, 4, cb); }
-      }, function(err, r) {
-        assert(!err, err);
-
-        assert.equal(1, r.s1);
-        assert.equal(3, r.s2);
-        assert.equal(6, r.s3);
-        assert.equal(10, r.s4);
-        assert.equal(10, r.s);
-        assert.equal(r.s2 - r.s1, r.d12);
-        assert.equal(r.s3 - r.s1, r.d13);
-        assert.equal(r.s4 - r.s1, r.d14);
-        assert.equal(r.s4 - r.s2, r.d24);
-
-        done();
-      });
+      async.parallel([
+        asyncAssert.equal(s.sum(1), 1),
+        asyncAssert.equal(s.sum(2), 3),
+        asyncAssert.equal(s.sum(3), 6),
+        asyncAssert.equal(s.sum(4), 10),
+        asyncAssert.equal(s.delta(1, 2), 2),
+        asyncAssert.equal(s.delta(1, 3), 5),
+        asyncAssert.equal(s.delta(1, 4), 9),
+        asyncAssert.equal(s.delta(2, 4), 7)
+      ], done);
     });
   });
 
   it('uses delta merging', function(done) {
+    s.sum = _.curry(s.sum);
+
     patchN1s(125, function(err) {
       assert(!err, err);
 
-      async.parallel({
-        s5: function(cb) { s.sum(5, cb); },
-        ds4: function(cb) { s.collectDeltas(0, 4, cb); },
-        ds5: function(cb) { s.collectDeltas(0, 5, cb); },
-        ds6: function(cb) { s.collectDeltas(0, 6, cb); },
-        ds10: function(cb) { s.collectDeltas(0, 10, cb); },
-        ds125: function(cb) { s.collectDeltas(0, 125, cb); },
-        ds124: function(cb) { s.collectDeltas(0, 124, cb); }
-      }, function(err, r) {
-        assert.equal(r.s5, 5);
-        assert.deepEqual(r.ds4, [1,1,1,1]);
-        assert.deepEqual(r.ds5, [5]);
-        assert.deepEqual(r.ds6, [5,1]);
-        assert.deepEqual(r.ds10, [5,5]);
-        assert.deepEqual(r.ds125, [125]);
-        assert.deepEqual(r.ds124, [25,25,25,25,5,5,5,5,1,1,1,1]);
-        done();
-      });
+      async.parallel([
+        asyncAssert.equal(s.sum(5), 5),
+        asyncAssert.deepEqual(s.collectDeltas(0,4), [1,1,1,1]),
+        asyncAssert.deepEqual(s.collectDeltas(0,5), [5]),
+        asyncAssert.deepEqual(s.collectDeltas(0,6), [5,1]),
+        asyncAssert.deepEqual(s.collectDeltas(0,10), [5,5]),
+        asyncAssert.deepEqual(s.collectDeltas(0,124), [25,25,25,25,5,5,5,5,1,1,1,1]),
+        asyncAssert.deepEqual(s.collectDeltas(0,125), [125]),
+      ], done);
     });
   });
 
@@ -135,47 +141,42 @@ describe('Synopsis', function() {
     patchN1s(1000, function(err) {
       assert(!err, err);
 
-      async.parallel({
-        d0t0: function(cb) { s.delta(0, 0, cb); },
-        d1t2: function(cb) { s.delta(1, 2, cb); },
-        d1t3: function(cb) { s.delta(1, 3, cb); },
-        d0t50: function(cb) { s.delta(0, 50, cb); },
-        d1t50: function(cb) { s.delta(1, 50, cb); },
-        d951t1000: function(cb) { s.delta(951, 1000, cb); },
-      }, function(err, r) {
-        assert(!err, err);
-
-        assert.equal(r.d0t0, 0);
-        assert.equal(r.d1t2, 1);
-        assert.equal(r.d1t3, 2);
-        assert.equal(r.d0t50, 50);
-        assert.equal(r.d1t50, 50);
-        assert.equal(r.d951t1000, 50);
-        done();
-      });
+      async.parallel([
+        asyncAssert.equal(s.delta(0,0), 0),
+        asyncAssert.equal(s.delta(0,1), 1),
+        asyncAssert.equal(s.delta(1,2), 1),
+        asyncAssert.equal(s.delta(0,50), 50),
+        asyncAssert.equal(s.delta(1,50), 49),
+        asyncAssert.equal(s.delta(951,1000), 49)
+      ], done);
     });
   });
 
-  var hardCount = 20000;
+  var hardCount = 10000;
   it('has reasonable speed for ' + hardCount + ' patches', function(done) {
-    this.timeout(1000);
+    this.timeout(10000);
 
+    var start = Date.now();
     patchN1s(hardCount, function(err) {
       assert(!err, err);
-      s.sum(hardCount-1, function(err, sum) {
+      s.sum(hardCount - 1, function(err, sum) {
         assert.equal(sum, hardCount-1);
+
+        assert(Date.now() - start < 1000);
         done();
       });
     });
   });
 
   it('emits patched events', function(done) {
-    s.on('patched', function(patch) {
-      assert.equal(patch, 1);
+    s.on('patched', function(p) {
+      assert.equal(p, 1);
       done();
     });
 
-    s.patch(1);
+    s.patch(1, function(err) {
+      assert(!err, err);
+    });
   });
 
   it('rollup works', function(done) {
@@ -204,9 +205,15 @@ describe('Synopsis', function() {
     ], done);
   });
 
+  function patchN1s(n, cb) {
+    async.mapSeries(_.range(1, n+1), function(n, cb) { s.patch(1, cb); }, cb);
+  }
+
   it('works with non-trivial deltas', function(done) {
+    this.timeout(3000000);
     var s = new Synopsis({
       start: {},
+      granularity: 2,
       patcher: function(doc, patch) {
         return jiff.patch(patch, doc);
       },
@@ -215,39 +222,70 @@ describe('Synopsis', function() {
       }
     });
 
-    async.eachSeries([
-      [{op: 'add', path: '/a', value: 1}],
-      [{op: 'add', path: '/b', value: 2}],
-      [{op: 'add', path: '/c', value: 3}],
-      [{op: 'add', path: '/d', value: 4}]
-    ], s.patch, function(err) {
-      assert(!err, err);
+    s.sum = _.curry(s.sum);
+    s.delta = _.curry(s.delta);
+    s.collectDeltas = _.curry(s.collectDeltas);
 
-      async.parallel({
-        s0: function(cb) { s.sum(0, cb); },
-        s: function(cb) { s.sum(cb); },
-        d1: function(cb) {
-          assert(typeof cb === 'function', 'd1 cb not a function');
-          s.collectDeltas(0, 1, cb);
-        },
-        s1: function(cb) { s.sum(1, cb); },
-        d1t3: function(cb) { s.delta(1, 3, cb); }
-      }, function(err, r) {
-        assert.deepEqual({}, r.s0);
-        assert.deepEqual([[{op: 'add', path: '/a', value: 1}]], r.d1);
-        assert.deepEqual({a: 1}, r.s1);
-        assert.deepEqual(r.s, {a:1, b:2, c:3, d:4});
-        assert.deepEqual(r.d1t3, [
-          {op: 'add', path: '/c', value: 3},
-          {op: 'add', path: '/b', value: 2}
-        ]);
+    addPatches(s, [
+      [{op: 'add', path: '/a', value: [1]}],
+      [{op: 'add', path: '/a/1', value: 2}],
+      [{op: 'add', path: '/a/2', value: 3}],
+      [{op: 'add', path: '/a/3', value: 4}],
+      [{op: 'add', path: '/a/4', value: 5}],
+      [{op: 'add', path: '/a/5', value: 6}],
+      [{op: 'add', path: '/a/6', value: 7}],
+      [{op: 'add', path: '/a/7', value: 8}]
+      ], function(err) {
+        assert(!err, err);
 
-        done();
+        async.parallel([
+          asyncAssert.deepEqual(s.sum(0), {}),
+          asyncAssert.deepEqual(s.sum(1), {a: [1]}),
+          asyncAssert.deepEqual(s.delta(0, 1), [
+            {op: 'add', path: '/a', value: [1]}
+          ]),
+          asyncAssert.deepEqual(s.collectDeltas(0, 1), [
+            [{op: 'add', path: '/a', value: [1]}]
+          ]),
+          asyncAssert.deepEqual(s.delta(1, 3), [
+            {op: 'add', path: '/a/1', value: 2, context: undefined},
+            {op: 'add', path: '/a/2', value: 3, context: undefined}
+          ]),
+          asyncAssert.deepEqual(s.sum(5), {a: [1,2,3,4,5]}),
+          asyncAssert.deepEqual(s.sum(8), {a: [1,2,3,4,5,6,7,8]}),
+          asyncAssert.deepEqual(s.collectDeltas(2, 3), [[
+            {op: 'add', path: '/a/2', value: 3, context: undefined}
+          ]]),
+          asyncAssert.deepEqual(s.collectDeltas(2, 4), [[
+            {op: 'add', path: '/a/2', value: 3, context: undefined},
+            {op: 'add', path: '/a/3', value: 4, context: undefined}
+          ]]),
+          asyncAssert.deepEqual(s.collectDeltas(3, 4), [[
+            {op: 'add', path: '/a/3', value: 4, context: undefined}
+          ]]),
+          asyncAssert.deepEqual(s.collectDeltas(3, 5), [
+            [{op: 'add', path: '/a/3', value: 4, context: undefined}],
+            [{op: 'add', path: '/a/4', value: 5, context: undefined}]
+          ]),
+          asyncAssert.deepEqual(s.collectDeltas(5,8), [
+            [
+              {op: 'add', path: '/a/5', value: 6, context: undefined}
+            ],
+            [
+              {op: 'add', path: '/a/6', value: 7, context: undefined},
+              {op: 'add', path: '/a/7', value: 8, context: undefined}
+            ]
+          ]),
+          asyncAssert.deepEqual(s.delta(5,8), [
+            {op: 'add', path: '/a/5', value: 6, context: undefined},
+            {op: 'add', path: '/a/6', value: 7, context: undefined},
+            {op: 'add', path: '/a/7', value: 8, context: undefined}
+          ]),
+        ], done);
       });
     });
-  });
-
-  function patchN1s(n, cb) {
-    async.map(_.range(1, n+1), function(n, cb) { s.patch(1, cb); }, cb);
-  }
 });
+
+function addPatches(s, patches, cb) {
+  async.eachSeries(patches, s.patch, cb);
+}
