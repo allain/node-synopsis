@@ -19,12 +19,12 @@ var asyncAssert = {
   }),
   deepEqual: _.curry(function(generator, expected, cb) {
     generator(function(err, actual) {
-      try {
+      //try {
         assert.equal(JSON.stringify(actual), JSON.stringify(expected));
         cb();
-      } catch(e) {
-        cb(e);
-      }
+      //} catch(e) {
+      //  cb(e);
+      //}
     });
   })
 };
@@ -47,15 +47,17 @@ describe('Synopsis', function() {
     s.patch = _.curry(s.patch);
     s.delta = _.curry(s.delta);
     s.collectDeltas = _.curry(s.collectDeltas);
-
+    s.size = _.curry(s.size);
     done();
   });
 
   it('is sane when empty', function(done) {
-    s.sum(0, function(err, sum) {
-      assert.equal(sum, 0);
-      done();
-    });
+    s.sum = _.curry(s.sum);
+
+    async.parallel([
+      asyncAssert.equal(s.sum(0), 0),
+      asyncAssert.equal(s.size(), 0)
+    ], done());
   });
 
   it('sum can accept no index', function(done) {
@@ -69,16 +71,17 @@ describe('Synopsis', function() {
     async.series([
       s.patch(2),
       s.patch(3),
-      function(cb) {
-        s.sum(function(err, sum) {
-          assert(!err, err);
+      asyncAssert.equal(s.size(), 2)
+    ], function(err, cb) {
+      assert(!err, err);
 
-          assert.equal(sum, 5);
-          done();
-          cb();
-        });
-      }
-    ]);
+      s.sum(function(err, sum) {
+        assert(!err, err);
+
+        assert.equal(sum, 5);
+        done();
+      });
+    });
   });
 
 
@@ -179,29 +182,14 @@ describe('Synopsis', function() {
     });
   });
 
-  it('rollup works', function(done) {
+  it('size works', function(done) {
     async.series([
-      function(cb) {
-        patchN1s(10, cb);
-      },
-      function(cb) {
-        s.rollup(5, function(err, result) {
-          assert.deepEqual(result, {
-            patch: 5,
-            end: 10
-          });
-          cb();
-        });
-      },
-      function(cb) {
-        s.rollup(10, function(err, result) {
-          assert.deepEqual(result, {
-            patch: 0,
-            end: 10
-          });
-          cb();
-        });
-      }
+      asyncAssert.equal(s.size(), 0),
+      s.patch(1),
+      //asyncAssert.equal(s.size(), 1),
+    /*  asyncAssert.equal(s.size(), 1),
+      s.patch(2),
+      asyncAssert.equal(s.size(), 2)*/
     ], done);
   });
 

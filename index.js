@@ -221,24 +221,21 @@ function Synopsis(options) {
     });
   }
 
-  function rollup(from, cb) {
-    var c = count;
-    var patch = delta(from, c, function(err, delta) {
-      cb(null, {
-        patch: delta,
-        end: c
-      });
+  function size(cb) {
+    if (count || count === 0) return cb(null, count);
+
+    store.get('count', function(err, c) {
+      if (err) return cb(err);
+
+      count = c || 0;
+
+      cb(null, count);
     });
   }
-
-  store.get('count', function(err, c) {
-    count = c || 0;
-    self.emit('ready');
-  });
 
   this.sum = sum;
   this.delta = delta;
   this.patch = patch;
   this.collectDeltas = collectDeltas;
-  this.rollup = rollup;
+  this.size = size;
 }
