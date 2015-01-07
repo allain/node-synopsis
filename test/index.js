@@ -51,6 +51,21 @@ describe('Synopsis', function() {
     done();
   });
 
+  it('emits ready', function(done) {
+    new Synopsis({
+      start: 0,
+      granularity: 5,
+      patcher: function(prev, patch) {
+        return prev + patch;
+      },
+      differ: function(before, after) {
+        return after - before;
+      }
+    }).on('ready', function() {
+      done();
+    });
+  });
+
   it('is sane when empty', function(done) {
     s.sum = _.curry(s.sum);
 

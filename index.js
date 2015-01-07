@@ -233,6 +233,14 @@ function Synopsis(options) {
     });
   }
 
+  size(function(err) {
+    if (err) return debug('error', err);
+
+    process.nextTick(function() {
+      self.emit('ready');
+    });
+  });
+
   this.sum = sum;
   this.delta = delta;
   this.patch = patch;
