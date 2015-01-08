@@ -22,7 +22,7 @@ function Synopsis(options) {
 
   var granularity = options.granularity || 5;
 
-  var count = 0;
+  var count;
 
   var deltaCache = this.deltaCache = {};
   var differ = options.differ;
@@ -138,7 +138,7 @@ function Synopsis(options) {
     var result = [];
 
     if (idx2 > count) return cb(new Error('index out of range: ' + idx2));
-    if (idx1 > idx2) return cb(new Error('delta in incorrect order'));
+    if (idx1 > idx2) return cb(new Error('delta in incorrect order: ' + idx1 + ' > ' + idx2));
 
     if (idx1 === idx2) return cb(null, []);
 
