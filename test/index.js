@@ -197,7 +197,7 @@ describe('Synopsis', function() {
     });
   });
 
-  var hardCount = 10000;
+  var hardCount = 1000;
   it('has reasonable speed for ' + hardCount + ' patches', function(done) {
     this.timeout(10000);
 
@@ -314,6 +314,27 @@ describe('Synopsis', function() {
   describe('streaming', function() {
     beforeEach(function(done) {
       patchN1s(100, done);
+    });
+
+    it('sends first delta without having to write to it first', function(done) {
+      s.createStream(function(err, stream) {
+        stream.on('data', function(update) {
+          assert.deepEqual(update, [100, 100]);
+          done();
+        });
+      });
+    });
+
+    it('sends no updates unless changes occur', function(done) {
+      s.createStream(function(err, stream) {
+        var expectedData = [[100, 100]];
+        stream.on('data', function(update) {
+          assert.deepEqual(update, expectedData.shift());
+          setTimeout(function() {
+            done();
+          }, 25);
+        });
+      });
     });
 
     it('supports creation of duplex stream', function(done) {
