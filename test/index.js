@@ -19,12 +19,12 @@ var asyncAssert = {
   }),
   deepEqual: _.curry(function(generator, expected, cb) {
     generator(function(err, actual) {
-      //try {
+      try {
         assert.equal(JSON.stringify(actual), JSON.stringify(expected));
         cb();
-      //} catch(e) {
-      //  cb(e);
-      //}
+      } catch(e) {
+        cb(e);
+      }
     });
   })
 };
@@ -96,6 +96,29 @@ describe('Synopsis', function() {
         assert.equal(sum, 5);
         done();
       });
+    });
+  });
+
+
+  it('can handle multiple simultaneous incoming patches', function(done) {
+    s.sum = _.curry(s.sum);
+
+    this.timeout(30000);
+
+    var patchOps = [];
+    async.parallel(_.range(0, 10000).map(function(n) {
+      return function(cb) {
+        setImmediate(function() {
+          return s.patch((n % 2) * 2 - 1, cb);
+        });
+      };
+    }), function(err) {
+      if (err) done(err);
+
+      async.parallel([
+        asyncAssert.equal(s.sum(1000), 0),
+        //asyncAssert.equal(s.size(), 1000),
+      ], done);
     });
   });
 

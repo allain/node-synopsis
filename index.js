@@ -2,6 +2,7 @@ module.exports = Synopsis;
 
 var assert = require('assert');
 var async = require('async');
+var values = require('amp-values');
 
 var EventEmitter = require('events').EventEmitter;
 
@@ -37,9 +38,42 @@ function Synopsis(options) {
       set: function(key, value, cb) {
         cache[key] = value;
         cb();
+      },
+      setAll: function(map, cb) {
+        var self = this;
+        async.eachSeries(Object.keys(map), function(key, cb) {
+          self.set(key, map[key], cb);
+        }, cb);
       }
     };
   })();
+
+  if (!store.setAll) {
+    store.setAll = function(map, cb) {
+      async.eachSeries(Object.keys(map), function(key, cb) {
+        store.set(key, map[key], cb);
+      }, cb);
+    };
+  }
+
+  if (!store.getAll) {
+    store.getAll = function(keys, cb) {
+      var result = {};
+      async.eachSeries(keys, function(key, cb) {
+        store.get(key, function(err, val) {
+          if (err) return cb(err);
+
+          result[key] = val;
+
+          cb();
+        });
+      }, function(err) {
+        if (err) return cb(err);
+
+        return cb(null, result);
+      });
+    };
+  }
 
   function sum(index, cb) {
     if (typeof cb === 'undefined') {
@@ -64,30 +98,36 @@ function Synopsis(options) {
     });
   }
 
+
+  var patchQueue = async.queue(function(task, cb) {
+    var delta = task.patch;
+
+    ++count;
+
+    var storeDoc = {};
+    storeDoc[count + '-1'] = delta;
+    storeDoc.count = count;
+
+    store.setAll(storeDoc, function (err) {
+      if (err) return cb(err);
+
+      updateAggregates(delta, function(err) {
+        if (err) return cb(err);
+
+        self.emit('patched', delta);
+
+        cb();
+      });
+    });
+  }, 1);
+
   function patch(delta, cb) {
     testNewPatch(delta, applyPatch);
 
     function applyPatch(err) {
-      if (err) {
-        return cb(err);
-      }
+      if (err) return cb(err);
 
-      // TODO: make these two set operations atomic
-      store.set(++ count + '-1', delta, function(err) {
-        if (err) return cb(err);
-
-        store.set('count', count, function(err) {
-          if (err) return cb(err);
-
-          updateAggregates(delta, function(err) {
-            if (err) return cb(err);
-
-            self.emit('patched', delta);
-
-            cb();
-          });
-        });
-      });
+      patchQueue.push({patch: delta}, cb);
     }
   }
 
@@ -134,67 +174,51 @@ function Synopsis(options) {
     });
   }
 
-  function collectDeltas(idx1, idx2, cb) {
-    var result = [];
+  function computeIntervalKeys(idx1, idx2) {
+    var idx = idx2;
 
+    var keys = [];
+
+    while (idx > idx1) {
+      if (idx === 0) {
+        break;
+      } else if (idx % granularity !== 0) {
+        keys.push(idx-- + '-1');
+        continue;
+      }
+
+      var deltaSize = idx - idx1;
+      var deltaScale = Math.pow(granularity, Math.floor(Math.log(deltaSize)/Math.log(granularity)));
+      var cached;
+
+      do {
+        if (idx % deltaScale === 0) {
+          break;
+        } else {
+          deltaScale /= granularity;
+        }
+      } while (idx > 0 && deltaScale > 1);
+
+      keys.push(idx + '-' + deltaScale);
+      
+      idx -= deltaScale;
+    }
+
+    return keys.reverse();
+  }
+
+  function collectDeltas(idx1, idx2, cb) {
     if (idx2 > count) return cb(new Error('index out of range: ' + idx2));
     if (idx1 > idx2) return cb(new Error('delta in incorrect order: ' + idx1 + ' > ' + idx2));
 
     if (idx1 === idx2) return cb(null, []);
 
-    var idx = idx2;
+    var keys = computeIntervalKeys(idx1, idx2);
 
-    async.whilst(function() {
-      return idx > idx1;
-    }, function(next) {
-      if (idx === 0) {
-        idx --;
-        return next();
-      } else if (idx % granularity !== 0) {
-        store.get(idx -- + '-1', function(err, delta) {
-          result.push(delta);
-          return next();
-        });
-        return;
-      }
+    store.getAll(keys, function(err, deltaMap) {
+      if (err) return cb(err);
 
-      var deltaSize = idx - idx1;
-      var deltaScale = Math.pow(granularity, Math.floor(Math.log(deltaSize)/Math.log(granularity)));
-
-      var cached;
-
-      async.doWhilst(function(next) {
-        if (idx % deltaScale === 0) {
-          store.get(idx + '-' + deltaScale, function(err, c) {
-            if (c) {
-              cached = c;
-            } else {
-              deltaScale /= granularity;
-            }
-            next();
-          });
-        } else {
-          deltaScale /= granularity;
-          next();
-        }
-      }, function() {
-        return !cached && deltaScale > 1;
-      }, function(err) {
-        if (err) return next(err);
-        if (cached) {
-          result.push(cached);
-          idx -= deltaScale;
-
-          next();
-        } else {
-          store.get(idx -- + '-1', function(err, delta) {
-            result.push(delta);
-            next();
-          });
-        }
-      });
-    }, function(err) {
-      cb(err, result.reverse());
+      cb(null, values(deltaMap));
     });
   }
 
@@ -246,4 +270,5 @@ function Synopsis(options) {
   this.patch = patch;
   this.collectDeltas = collectDeltas;
   this.size = size;
+  this.computeIntervalKeys = computeIntervalKeys;
 }
