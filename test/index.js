@@ -2,6 +2,7 @@ var assert = require('assert');
 var jiff = require('jiff');
 var async = require('async');
 var _ = require('lodash');
+var Duplex = require('stream').Duplex;
 
 var Synopsis = require('../index.js');
 
@@ -48,7 +49,10 @@ describe('Synopsis', function() {
     s.delta = _.curry(s.delta);
     s.collectDeltas = _.curry(s.collectDeltas);
     s.size = _.curry(s.size);
-    done();
+
+    s.on('ready', function() {
+      done();
+    });
   });
 
   it('emits ready', function(done) {
@@ -231,10 +235,6 @@ describe('Synopsis', function() {
     ], done);
   });
 
-  function patchN1s(n, cb) {
-    async.mapSeries(_.range(1, n+1), function(n, cb) { s.patch(1, cb); }, cb);
-  }
-
   it('works with non-trivial deltas', function(done) {
     this.timeout(3000000);
     var s = new Synopsis({
@@ -261,55 +261,122 @@ describe('Synopsis', function() {
       [{op: 'add', path: '/a/5', value: 6}],
       [{op: 'add', path: '/a/6', value: 7}],
       [{op: 'add', path: '/a/7', value: 8}]
-      ], function(err) {
-        assert(!err, err);
+    ], function(err) {
+      assert(!err, err);
 
-        async.parallel([
-          asyncAssert.deepEqual(s.sum(0), {}),
-          asyncAssert.deepEqual(s.sum(1), {a: [1]}),
-          asyncAssert.deepEqual(s.delta(0, 1), [
-            {op: 'add', path: '/a', value: [1]}
-          ]),
-          asyncAssert.deepEqual(s.collectDeltas(0, 1), [
-            [{op: 'add', path: '/a', value: [1]}]
-          ]),
-          asyncAssert.deepEqual(s.delta(1, 3), [
-            {op: 'add', path: '/a/1', value: 2, context: undefined},
-            {op: 'add', path: '/a/2', value: 3, context: undefined}
-          ]),
-          asyncAssert.deepEqual(s.sum(5), {a: [1,2,3,4,5]}),
-          asyncAssert.deepEqual(s.sum(8), {a: [1,2,3,4,5,6,7,8]}),
-          asyncAssert.deepEqual(s.collectDeltas(2, 3), [[
-            {op: 'add', path: '/a/2', value: 3, context: undefined}
-          ]]),
-          asyncAssert.deepEqual(s.collectDeltas(2, 4), [[
-            {op: 'add', path: '/a/2', value: 3, context: undefined},
-            {op: 'add', path: '/a/3', value: 4, context: undefined}
-          ]]),
-          asyncAssert.deepEqual(s.collectDeltas(3, 4), [[
-            {op: 'add', path: '/a/3', value: 4, context: undefined}
-          ]]),
-          asyncAssert.deepEqual(s.collectDeltas(3, 5), [
-            [{op: 'add', path: '/a/3', value: 4, context: undefined}],
-            [{op: 'add', path: '/a/4', value: 5, context: undefined}]
-          ]),
-          asyncAssert.deepEqual(s.collectDeltas(5,8), [
-            [
-              {op: 'add', path: '/a/5', value: 6, context: undefined}
-            ],
-            [
-              {op: 'add', path: '/a/6', value: 7, context: undefined},
-              {op: 'add', path: '/a/7', value: 8, context: undefined}
-            ]
-          ]),
-          asyncAssert.deepEqual(s.delta(5,8), [
-            {op: 'add', path: '/a/5', value: 6, context: undefined},
+      async.parallel([
+        asyncAssert.deepEqual(s.sum(0), {}),
+        asyncAssert.deepEqual(s.sum(1), {a: [1]}),
+        asyncAssert.deepEqual(s.delta(0, 1), [
+          {op: 'add', path: '/a', value: [1]}
+        ]),
+        asyncAssert.deepEqual(s.collectDeltas(0, 1), [
+          [{op: 'add', path: '/a', value: [1]}]
+        ]),
+        asyncAssert.deepEqual(s.delta(1, 3), [
+          {op: 'add', path: '/a/1', value: 2, context: undefined},
+          {op: 'add', path: '/a/2', value: 3, context: undefined}
+        ]),
+        asyncAssert.deepEqual(s.sum(5), {a: [1,2,3,4,5]}),
+        asyncAssert.deepEqual(s.sum(8), {a: [1,2,3,4,5,6,7,8]}),
+        asyncAssert.deepEqual(s.collectDeltas(2, 3), [[
+          {op: 'add', path: '/a/2', value: 3, context: undefined}
+        ]]),
+        asyncAssert.deepEqual(s.collectDeltas(2, 4), [[
+          {op: 'add', path: '/a/2', value: 3, context: undefined},
+          {op: 'add', path: '/a/3', value: 4, context: undefined}
+        ]]),
+        asyncAssert.deepEqual(s.collectDeltas(3, 4), [[
+          {op: 'add', path: '/a/3', value: 4, context: undefined}
+        ]]),
+        asyncAssert.deepEqual(s.collectDeltas(3, 5), [
+          [{op: 'add', path: '/a/3', value: 4, context: undefined}],
+          [{op: 'add', path: '/a/4', value: 5, context: undefined}]
+        ]),
+        asyncAssert.deepEqual(s.collectDeltas(5,8), [
+          [
+            {op: 'add', path: '/a/5', value: 6, context: undefined}
+          ],
+          [
             {op: 'add', path: '/a/6', value: 7, context: undefined},
             {op: 'add', path: '/a/7', value: 8, context: undefined}
-          ]),
-        ], done);
+          ]
+        ]),
+        asyncAssert.deepEqual(s.delta(5,8), [
+          {op: 'add', path: '/a/5', value: 6, context: undefined},
+          {op: 'add', path: '/a/6', value: 7, context: undefined},
+          {op: 'add', path: '/a/7', value: 8, context: undefined}
+        ]),
+      ], done);
+    });
+  });
+
+  describe('streaming', function() {
+    beforeEach(function(done) {
+      patchN1s(100, done);
+    });
+
+    it('supports creation of duplex stream', function(done) {
+      s.createStream(function(err, stream) {
+        assert(!err);
+        assert(stream instanceof Duplex);
+
+        var expectedData = [
+        [100, 100], // includes everything from the start (0)
+        [2, 101] // only includes the 2 patch from below
+        ];
+
+        stream.on('data', function(update) {
+          var expected = expectedData.shift();
+
+          assert.deepEqual(update, expected);
+          if (expectedData.length === 0) {
+            done();
+          }
+        });
+
+
+        s.patch(2, function(err) {
+          assert(!err, err);
+        });
       });
     });
+
+    it('supports specifying a start index', function(done) {
+      s.createStream(50, function(err, stream) {
+        assert(!err);
+        assert(stream instanceof Duplex);
+
+        var expectedData = [
+        [50, 100], // includes everything from the start (0)
+        [2, 101] // only includes the 2 patch from below
+        ];
+
+        stream.on('data', function(update) {
+          var expected = expectedData.shift();
+
+          assert.deepEqual(update, expected);
+          if (expectedData.length === 0) {
+            done();
+          }
+        });
+
+
+        s.patch(2, function(err) {
+          assert(!err, err);
+        });
+      });
+    });
+
+    it.skip('releases resources when stream closes', function(done) {
+      // TODO
+    });
+  });
+
+  function patchN1s(n, cb) {
+    async.eachSeries(_.range(0, n), function(n, cb) { s.patch(1, cb); }, cb);
+  }
+
 });
 
 function addPatches(s, patches, cb) {

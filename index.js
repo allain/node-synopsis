@@ -3,6 +3,7 @@ module.exports = Synopsis;
 var assert = require('assert');
 var async = require('async');
 var values = require('amp-values');
+var Duplex = require('stream').Duplex;
 
 var EventEmitter = require('events').EventEmitter;
 
@@ -179,10 +180,8 @@ function Synopsis(options) {
 
     var keys = [];
 
-    while (idx > idx1) {
-      if (idx === 0) {
-        break;
-      } else if (idx % granularity !== 0) {
+    while (idx > idx1 && idx !== 0) {
+      if (idx % granularity !== 0) {
         keys.push(idx-- + '-1');
         continue;
       }
@@ -200,7 +199,7 @@ function Synopsis(options) {
       } while (idx > 0 && deltaScale > 1);
 
       keys.push(idx + '-' + deltaScale);
-      
+
       idx -= deltaScale;
     }
 
@@ -257,6 +256,44 @@ function Synopsis(options) {
     });
   }
 
+  function createStream(startIndex, cb) {
+    if (typeof cb === 'undefined') {
+      cb = startIndex;
+      startIndex = 0;
+    }
+
+    var stream = new Duplex({
+      objectMode: true
+    });
+
+    stream.pause();
+
+    delta(startIndex, count, function(err, patch) {
+      stream.push([patch, count]);
+
+      // Naive push everything approach, it should support pausing then resuming
+      // It should compute the best delta when that happens
+      self.on('patched', function(patch) {
+        stream.push([patch, count]);
+      });
+
+      stream._read = function() {
+        // Not sure this should be needed
+      };
+
+      stream._write = function(chunk, encoding, callback) {
+        self.patch(chunk, function(err) {
+          // TODO: emit a reset event on err
+          callback(err);
+        });
+      };
+
+      stream.resume();
+
+      cb(null, stream);
+    });
+  }
+
   size(function(err) {
     if (err) return debug('error', err);
 
@@ -270,5 +307,5 @@ function Synopsis(options) {
   this.patch = patch;
   this.collectDeltas = collectDeltas;
   this.size = size;
-  this.computeIntervalKeys = computeIntervalKeys;
+  this.createStream = createStream;
 }
