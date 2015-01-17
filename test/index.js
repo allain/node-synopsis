@@ -1,7 +1,8 @@
 var assert = require('assert');
 var jiff = require('jiff');
 var async = require('async');
-var _ = require('lodash');
+var curry = require('curry');
+var range = require('amp-range');
 var Duplex = require('stream').Duplex;
 
 var Synopsis = require('../index.js');
@@ -33,7 +34,7 @@ function expectStream(expected, done) {
 
 // Little utility that allows me to more easily test async functions
 var asyncAssert = {
-  equal: _.curry(function(generator, expected, cb) {
+  equal: curry(function(generator, expected, cb) {
     generator(function(err, actual) {
       try {
         assert.equal(actual, expected);
@@ -43,7 +44,7 @@ var asyncAssert = {
       }
     });
   }),
-  deepEqual: _.curry(function(generator, expected, cb) {
+  deepEqual: curry(function(generator, expected, cb) {
     generator(function(err, actual) {
       try {
         assert.equal(JSON.stringify(actual), JSON.stringify(expected));
@@ -74,10 +75,10 @@ describe('Synopsis', function() {
       }
     });
 
-    s.patch = _.curry(s.patch);
-    s.delta = _.curry(s.delta);
-    s.collectDeltas = _.curry(s.collectDeltas);
-    s.size = _.curry(s.size);
+    s.patch = curry(s.patch);
+    s.delta = curry(s.delta);
+    s.collectDeltas = curry(s.collectDeltas);
+    s.size = curry(s.size);
 
     s.on('ready', function() {
       done();
@@ -100,7 +101,7 @@ describe('Synopsis', function() {
   });
 
   it('is sane when empty', function(done) {
-    s.sum = _.curry(s.sum);
+    s.sum = curry(s.sum);
 
     async.parallel([
       asyncAssert.equal(s.sum(0), 0),
@@ -134,12 +135,12 @@ describe('Synopsis', function() {
 
 
   it('can handle multiple simultaneous incoming patches', function(done) {
-    s.sum = _.curry(s.sum);
+    s.sum = curry(s.sum);
 
     this.timeout(30000);
 
     var patchOps = [];
-    async.parallel(_.range(0, 10000).map(function(n) {
+    async.parallel(range(10000).map(function(n) {
       return function(cb) {
         setImmediate(function() {
           var val = (n % 2) * 2 - 1;
@@ -175,9 +176,9 @@ describe('Synopsis', function() {
 
 
   it('sum behaves as expected', function(done) {
-    s.sum = _.curry(s.sum);
+    s.sum = curry(s.sum);
 
-    async.eachSeries(_.range(1,5),
+    async.eachSeries(range(1,5),
       s.patch,
       function(err) {
       assert(!err, err);
@@ -196,7 +197,7 @@ describe('Synopsis', function() {
   });
 
   it('uses delta merging', function(done) {
-    s.sum = _.curry(s.sum);
+    s.sum = curry(s.sum);
 
     patchN1s(125, function(err) {
       assert(!err, err);
@@ -279,9 +280,9 @@ describe('Synopsis', function() {
       }
     });
 
-    s.sum = _.curry(s.sum);
-    s.delta = _.curry(s.delta);
-    s.collectDeltas = _.curry(s.collectDeltas);
+    s.sum = curry(s.sum);
+    s.delta = curry(s.delta);
+    s.collectDeltas = curry(s.collectDeltas);
 
     addPatches(s, [
       [{op: 'add', path: '/a', value: [1]}],
@@ -433,7 +434,7 @@ describe('Synopsis', function() {
   });
 
   function patchN1s(n, cb) {
-    async.eachSeries(_.range(0, n), function(n, cb) { s.patch(1, cb); }, cb);
+    async.eachSeries(range(n), function(n, cb) { s.patch(1, cb); }, cb);
   }
 
 });
