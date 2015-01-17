@@ -63,6 +63,10 @@ describe('Synopsis', function() {
       start: 0,
       granularity: 5,
       patcher: function(prev, patch) {
+        if (patch === -2 /** Arbitrary to test failures */) {
+          throw new Error('Invalid Patch');
+        }
+
         return prev + patch;
       },
       differ: function(before, after) {
@@ -138,15 +142,17 @@ describe('Synopsis', function() {
     async.parallel(_.range(0, 10000).map(function(n) {
       return function(cb) {
         setImmediate(function() {
-          return s.patch((n % 2) * 2 - 1, cb);
+          var val = (n % 2) * 2 - 1;
+          assert(val === -1 || val === 1);
+          return s.patch(val, cb);
         });
       };
     }), function(err) {
       if (err) done(err);
 
       async.parallel([
-        asyncAssert.equal(s.sum(1000), 0),
-        //asyncAssert.equal(s.size(), 1000),
+        asyncAssert.equal(s.sum(10000), 0),
+        asyncAssert.equal(s.size(), 10000),
       ], done);
     });
   });
@@ -372,6 +378,37 @@ describe('Synopsis', function() {
       });
     });
 
+    it('supports specifying a start index', function(done) {
+      s.createStream(50, function(err, stream) {
+        stream.pipe(expectStream([
+          [50, 100], // includes everything from the start (0)
+          [2, 101] // only includes the 2 patch from below
+        ], done));
+
+        s.patch(2, function(err) {
+          assert(!err, err);
+        });
+      });
+    });
+    
+    it('emits nothing on startup if index is already at end', function(done) {
+      s.createStream(100, function(err, stream) {
+        var result = stream.read();
+        assert.equal(result, null);
+        done();
+      });
+    });
+ 
+    it('a failing patch causes a notification to be emitted', function(done) {
+      s.createStream(100, function(err, stream) {
+        stream.pipe(expectStream([
+          {error: 'patch failed', patch: -2, cause: 'Invalid Patch -2 to 100'}
+        ], done));
+        
+        stream.write(-2);
+      });
+    });
+    
     // Disabling until I either level up or find someone who already has 
     it.skip('pausing stream causes effective delta to be sent when resumed', function(done) {
       s.createStream( function(err, stream) {
@@ -390,19 +427,6 @@ describe('Synopsis', function() {
               stream.resume();
             });
           });
-        });
-      });
-    });
-    
-    it('supports specifying a start index', function(done) {
-      s.createStream(50, function(err, stream) {
-        stream.pipe(expectStream([
-          [50, 100], // includes everything from the start (0)
-          [2, 101] // only includes the 2 patch from below
-        ], done));
-
-        s.patch(2, function(err) {
-          assert(!err, err);
         });
       });
     });

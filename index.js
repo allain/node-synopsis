@@ -93,6 +93,7 @@ function Synopsis(options) {
     delta(0, index, function(err, d) {
       if (err) return cb(err);
 
+
       setImmediate(function() {
         cb(null, patcher(options.start, d));
       });
@@ -266,9 +267,16 @@ function Synopsis(options) {
       objectMode: true
     });
 
-    delta(startIndex, count, function(err, patch) {
-      stream.push([patch, count]);
+    if (startIndex === count) {
+      streamPatches();
+    } else {
+      delta(startIndex, count, function(err, patch) {
+        stream.push([patch, count]);
+        streamPatches();
+      });
+    }
 
+    function streamPatches() {
       var lastIndex = count;
       // Naive push everything approach, it should support pausing then resuming
       // It should compute the best delta when that happens
@@ -282,15 +290,18 @@ function Synopsis(options) {
       stream._read = function() {
       };
 
-      stream._write = function(chunk, encoding, callback) {
+      stream._write = function(chunk, encoding, next) {
         self.patch(chunk, function(err) {
-          // TODO: emit a reset event on err
-          callback(err);
+          if (err) {
+            stream.push({error: 'patch failed', patch: chunk, cause: err.message});
+          }
+
+          next();
         });
       };
 
       cb(null, stream);
-    });
+    }
   }
 
   size(function(err) {
