@@ -5,6 +5,31 @@ var _ = require('lodash');
 var Duplex = require('stream').Duplex;
 
 var Synopsis = require('../index.js');
+var Writable = require('stream').Writable;
+
+function expectStream(expected, done) {
+  assert(Array.isArray(expected));
+
+  var stream = new Writable({objectMode: true});
+
+  stream._write = function(chunk, encoding, cb) {
+    if (expected.length === 0) {
+      assert(false, 'write occurred after no writes expected');
+    }
+
+    var expectedChunk = expected.shift();
+    assert.deepEqual(chunk, expectedChunk);
+
+    cb();
+    if (expected.length === 0) {
+      setTimeout(function() {
+        done();
+      }, 10);
+    }
+  };
+ 
+  return stream;
+}
 
 // Little utility that allows me to more easily test async functions
 var asyncAssert = {
@@ -327,13 +352,7 @@ describe('Synopsis', function() {
 
     it('sends no updates unless changes occur', function(done) {
       s.createStream(function(err, stream) {
-        var expectedData = [[100, 100]];
-        stream.on('data', function(update) {
-          assert.deepEqual(update, expectedData.shift());
-          setTimeout(function() {
-            done();
-          }, 25);
-        });
+        stream.pipe(expectStream([[100, 100]], done));
       });
     });
 
@@ -342,20 +361,10 @@ describe('Synopsis', function() {
         assert(!err);
         assert(stream instanceof Duplex);
 
-        var expectedData = [
-        [100, 100], // includes everything from the start (0)
-        [2, 101] // only includes the 2 patch from below
-        ];
-
-        stream.on('data', function(update) {
-          var expected = expectedData.shift();
-
-          assert.deepEqual(update, expected);
-          if (expectedData.length === 0) {
-            done();
-          }
-        });
-
+        stream.pipe(expectStream([
+          [100, 100], // includes everything from the start (0)
+          [2, 101] // only includes the 2 patch from below
+        ], done));
 
         s.patch(2, function(err) {
           assert(!err, err);
@@ -363,34 +372,39 @@ describe('Synopsis', function() {
       });
     });
 
-    it('supports specifying a start index', function(done) {
-      s.createStream(50, function(err, stream) {
+    // Disabling until I either level up or find someone who already has 
+    it.skip('pausing stream causes effective delta to be sent when resumed', function(done) {
+      s.createStream( function(err, stream) {
         assert(!err);
         assert(stream instanceof Duplex);
 
-        var expectedData = [
-        [50, 100], // includes everything from the start (0)
-        [2, 101] // only includes the 2 patch from below
-        ];
-
-        stream.on('data', function(update) {
-          var expected = expectedData.shift();
-
-          assert.deepEqual(update, expected);
-          if (expectedData.length === 0) {
+        stream.once('data', function(update) {
+          assert.deepEqual(update, [100, 100]);
+          stream.pause();
+          stream.once('data', function(update) {
+            assert.deepEqual(update, [2, 102]);
             done();
-          }
+          });
+          s.patch(1, function(err) {
+            s.patch(1, function(err) {
+              stream.resume();
+            });
+          });
         });
-
+      });
+    });
+    
+    it('supports specifying a start index', function(done) {
+      s.createStream(50, function(err, stream) {
+        stream.pipe(expectStream([
+          [50, 100], // includes everything from the start (0)
+          [2, 101] // only includes the 2 patch from below
+        ], done));
 
         s.patch(2, function(err) {
           assert(!err, err);
         });
       });
-    });
-
-    it.skip('releases resources when stream closes', function(done) {
-      // TODO
     });
   });
 
