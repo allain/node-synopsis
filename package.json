@@ -4,7 +4,7 @@
   "description": "Efficiently computes synopsis of delta series.",
   "main": "index.js",
   "scripts": {
-    "test": "node_modules/.bin/grunt ci"
+    "test": "node_modules/mocha/bin/mocha test"
   },
   "repository": {
     "type": "git",
@@ -15,12 +15,8 @@
   "devDependencies": {
     "amp-range": "^1.0.1",
     "curry": "^1.2.0",
-    "grunt": "~0.4.1",
-    "grunt-cli": "~0.1.9",
-    "grunt-contrib-jshint": "~0.6.4",
-    "grunt-contrib-watch": "~0.5.3",
-    "grunt-mocha-cli": "~1.1.0",
-    "jiff": "^0.7.0"
+    "jiff": "^0.7.0",
+    "mocha": "^2.1.0"
   },
   "dependencies": {
     "amp-values": "^1.0.1",
