@@ -4,7 +4,8 @@
   "description": "Efficiently computes synopsis of delta series.",
   "main": "index.js",
   "scripts": {
-    "test": "node_modules/mocha/bin/mocha test"
+    "test": "node_modules/mocha/bin/mocha test",
+    "format": "find .  -name *.js -not -path './node_modules/*' | xargs node_modules/js-beautify/js/bin/js-beautify.js --replace" 
   },
   "repository": {
     "type": "git",
@@ -16,6 +17,9 @@
     "amp-range": "^1.0.1",
     "curry": "^1.2.0",
     "jiff": "^0.7.0",
+    "js-beautify": "^1.5.4",
+    "jscs": "^1.10.0",
+    "jshint": "^2.6.0",
     "mocha": "^2.1.0"
   },
   "dependencies": {

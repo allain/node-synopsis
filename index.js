@@ -93,13 +93,11 @@ function Synopsis(options) {
     delta(0, index, function(err, d) {
       if (err) return cb(err);
 
-
       setImmediate(function() {
         cb(null, patcher(options.start, d));
       });
     });
   }
-
 
   var patchQueue = async.queue(function(task, cb) {
     var delta = task.patch;
@@ -110,7 +108,7 @@ function Synopsis(options) {
     storeDoc[count + '-1'] = delta;
     storeDoc.count = count;
 
-    store.setAll(storeDoc, function (err) {
+    store.setAll(storeDoc, function(err) {
       if (err) return cb(err);
 
       updateAggregates(delta, function(err) {
@@ -129,7 +127,9 @@ function Synopsis(options) {
     function applyPatch(err) {
       if (err) return cb(err);
 
-      patchQueue.push({patch: delta}, cb);
+      patchQueue.push({
+        patch: delta
+      }, cb);
     }
   }
 
@@ -139,7 +139,7 @@ function Synopsis(options) {
 
       try {
         patcher(s, patch);
-      } catch(e) {
+      } catch (e) {
         return cb(new Error('Invalid Patch ' + JSON.stringify(patch) + " to " + JSON.stringify(s)));
       }
       cb();
@@ -183,12 +183,12 @@ function Synopsis(options) {
 
     while (idx > idx1 && idx !== 0) {
       if (idx % granularity !== 0) {
-        keys.push(idx-- + '-1');
+        keys.push(idx--+'-1');
         continue;
       }
 
       var deltaSize = idx - idx1;
-      var deltaScale = Math.pow(granularity, Math.floor(Math.log(deltaSize)/Math.log(granularity)));
+      var deltaScale = Math.pow(granularity, Math.floor(Math.log(deltaSize) / Math.log(granularity)));
       var cached;
 
       do {
@@ -280,20 +280,23 @@ function Synopsis(options) {
       var lastIndex = count;
       // Naive push everything approach, it should support pausing then resuming
       // It should compute the best delta when that happens
-      
+
       var pendingDelta;
 
       self.on('patched', function(patch) {
-        stream.push([patch, count]); 
+        stream.push([patch, count]);
       });
 
-      stream._read = function() {
-      };
+      stream._read = function() {};
 
       stream._write = function(chunk, encoding, next) {
         self.patch(chunk, function(err) {
           if (err) {
-            stream.push({error: 'patch failed', patch: chunk, cause: err.message});
+            stream.push({
+              error: 'patch failed',
+              patch: chunk,
+              cause: err.message
+            });
           }
 
           next();
