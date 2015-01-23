@@ -1,11 +1,11 @@
 {
   "name": "synopsis",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "Efficiently computes synopsis of delta series.",
   "main": "index.js",
   "scripts": {
     "test": "node_modules/mocha/bin/mocha test",
-    "format": "find .  -name '*.js' -not -path './node_modules/*' | xargs node_modules/js-beautify/js/bin/js-beautify.js --replace" 
+    "format": "find .  -name '*.js' -not -path './node_modules/*' | xargs node_modules/js-beautify/js/bin/js-beautify.js --replace"
   },
   "repository": {
     "type": "git",
