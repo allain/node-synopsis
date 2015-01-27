@@ -13,16 +13,20 @@
   },
   "author": "Allain Lalonde <allain.lalonde@gmail.com>",
   "license": "ISC",
-  "devDependencies": {
-    "amp-range": "^1.0.1",
-    "curry": "^1.2.0",
-    "jiff": "^0.7.0",
-    "js-beautify": "^1.5.4",
-    "mocha": "^2.1.0"
-  },
   "dependencies": {
     "amp-values": "^1.0.1",
     "async": "^0.9.0",
     "eventemitter": "^0.3.3"
+  },
+  "devDependencies": {
+    "amp-each": "^1.0.1",
+    "amp-range": "^1.0.1",
+    "bench-csv": "^1.0.1",
+    "curry": "^1.2.0",
+    "jiff": "^0.7.0",
+    "js-beautify": "^1.5.4",
+    "microtime": "^1.2.0",
+    "mocha": "^2.1.0",
+    "moment": "^2.9.0"
   }
 }
