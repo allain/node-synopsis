@@ -7,6 +7,9 @@
     "test": "node_modules/mocha/bin/mocha test",
     "format": "find .  -name '*.js' -not -path './node_modules/*' | xargs node_modules/js-beautify/js/bin/js-beautify.js --replace"
   },
+  "files": [
+    "index.js"
+  ],
   "repository": {
     "type": "git",
     "url": "http://www.github.com/allain/synopsis"

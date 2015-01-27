@@ -104,6 +104,7 @@ function Synopsis(options) {
 
     ++count;
 
+    //store patch and count atomically
     var storeDoc = {};
     storeDoc[count + '-1'] = delta;
     storeDoc.count = count;
@@ -278,7 +279,8 @@ function Synopsis(options) {
 
     function streamPatches() {
       var lastIndex = count;
-      // Naive push everything approach, it should support pausing then resuming
+      // Naive push everything approach, it should support pausing then resuming,
+      // in the event that the stream is too slow to keep up.
       // It should compute the best delta when that happens
 
       var pendingDelta;
