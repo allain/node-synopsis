@@ -94,7 +94,7 @@ function Synopsis(options) {
       if (err) return cb(err);
 
       setImmediate(function() {
-        cb(null, patcher(options.start, d));
+        patcher(options.start, d, cb);
       });
     });
   }
@@ -138,12 +138,7 @@ function Synopsis(options) {
     snapshot(function(err, s) {
       if (err) return cb(err);
 
-      try {
-        patcher(s, patch);
-      } catch (e) {
-        return cb(new Error('Invalid Patch ' + JSON.stringify(patch) + " to " + JSON.stringify(s)));
-      }
-      cb();
+      patcher(s, patch, cb);
     });
   }
 
@@ -158,26 +153,27 @@ function Synopsis(options) {
     snapshot(count - 1, function(err, prevSum) {
       if (err) return cb(err);
 
-      after = patcher(prevSum, delta);
+      patcher(prevSum, delta, function(err, after) {
+				if(err) return cb(err);
+				async.whilst(function() {
+					return scale <= count && count % scale === 0;
+				}, function(next) {
+					snapshot(count - scale, function(err, before) {
+						if (err) return next(err);
 
-      async.whilst(function() {
-        return scale <= count && count % scale === 0;
-      }, function(next) {
-        snapshot(count - scale, function(err, before) {
-          if (err) return next(err);
-
-          differ(before, after, function(err, diff) {
-            if (err) return next(err);
-
-						store.set(count + '-' + scale, diff, function(err) {
+						differ(before, after, function(err, diff) {
 							if (err) return next(err);
 
-							scale *= granularity;
-							next();
+							store.set(count + '-' + scale, diff, function(err) {
+								if (err) return next(err);
+
+								scale *= granularity;
+								next();
+							});
 						});
 					});
-        });
-      }, cb);
+				}, cb);
+			});
     });
   }
 
@@ -241,11 +237,15 @@ function Synopsis(options) {
 
         var result = start;
 
-        deltas.forEach(function(delta) {
-          result = patcher(result, delta);
-        });
-
-        differ(start, result, cb);
+				async.eachSeries(deltas, function(delta, cb) {
+          patcher(result, delta, function(err, newResult) {
+						if (err) return cb(err);
+            result = newResult;
+            cb();
+					});
+				}, function(err) {
+          differ(start, result, cb);
+				});
       });
     });
   }

@@ -4,7 +4,7 @@ var async = require('async');
 var curry = require('curry');
 var range = require('amp-range');
 var Duplex = require('stream').Duplex;
-
+var stdout = require('stdout');
 var Synopsis = require('../index.js');
 var Writable = require('stream').Writable;
 
@@ -20,15 +20,16 @@ function expectStream(expected, done) {
       assert(false, 'write occurred after no writes expected');
     }
 
-    var expectedChunk = expected.shift();
+		var expectedChunk = expected.shift();
     assert.deepEqual(chunk, expectedChunk);
 
-    cb();
     if (expected.length === 0) {
       setTimeout(function() {
         done();
       }, 10);
     }
+    
+    cb();
   };
 
   return stream;
@@ -65,12 +66,12 @@ describe('Synopsis', function() {
     s = new Synopsis({
       start: 0,
       granularity: 5,
-      patcher: function(prev, patch) {
+      patcher: function(prev, patch, cb) {
         if (patch === -2 /** Arbitrary to test failures */ ) {
-          throw new Error('Invalid Patch');
+          return cb(new Error('Invalid Patch'));
         }
 
-        return prev + patch;
+        cb(null, prev + patch);
       },
       differ: function(before, after, cb) {
         cb(null, after - before);
@@ -91,8 +92,8 @@ describe('Synopsis', function() {
     new Synopsis({
       start: 0,
       granularity: 5,
-      patcher: function(prev, patch) {
-        return prev + patch;
+      patcher: function(prev, patch, cb) {
+        cb(null, prev + patch);
       },
       differ: function(before, after, cb) {
         cb(null, after - before);
@@ -270,8 +271,8 @@ describe('Synopsis', function() {
     var s = new Synopsis({
       start: {},
       granularity: 2,
-      patcher: function(doc, patch) {
-        return jiff.patch(patch, doc);
+      patcher: function(doc, patch, cb) {
+        cb(null, jiff.patch(patch, doc));
       },
       differ: function(before, after, cb) {
         cb(null, jiff.diff(before, after));
@@ -503,11 +504,14 @@ describe('Synopsis', function() {
 
     it('a failing patch causes a notification to be emitted', function(done) {
       s.createStream(100, function(err, stream) {
+        if (err) {
+           assert.fail('no exception expected here');
+				}
         stream.pipe(expectStream([{
           error: 'patch failed',
           patch: -2,
-          cause: 'Invalid Patch -2 to 100'
-                }], done));
+          cause: 'Invalid Patch'
+        }], done));
 
         stream.write(-2);
       });

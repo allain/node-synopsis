@@ -30,6 +30,7 @@
     "js-beautify": "^1.5.4",
     "microtime": "^1.2.0",
     "mocha": "^2.1.0",
-    "moment": "^2.9.0"
+    "moment": "^2.9.0",
+    "stdout": "0.0.3"
   }
 }
