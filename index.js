@@ -76,7 +76,7 @@ function Synopsis(options) {
     };
   }
 
-  function snapshot(index, cb) {
+  function sum(index, cb) {
     if (typeof cb === 'undefined') {
       cb = index;
       index = count;
@@ -134,7 +134,7 @@ function Synopsis(options) {
   }
 
   function testNewPatch(patch, cb) {
-    snapshot(function(err, s) {
+    sum(function(err, s) {
       if (err) return cb(err);
 
       try {
@@ -154,7 +154,7 @@ function Synopsis(options) {
     }
 
     var after;
-    snapshot(count - 1, function(err, prevSum) {
+    sum(count - 1, function(err, prevSum) {
       if (err) return cb(err);
 
       after = patcher(prevSum, delta);
@@ -162,7 +162,7 @@ function Synopsis(options) {
       async.whilst(function() {
         return scale <= count && count % scale === 0;
       }, function(next) {
-        snapshot(count - scale, function(err, before) {
+        sum(count - scale, function(err, before) {
           if (err) return next(err);
 
           store.set(count + '-' + scale, differ(before, after), function(err) {
@@ -231,7 +231,7 @@ function Synopsis(options) {
     collectDeltas(idx1, idx2, function(err, deltas) {
       if (err) return cb(err);
 
-      snapshot(idx1, function(err, start) {
+      sum(idx1, function(err, start) {
         if (err) return cb(err);
 
         var result = start;
@@ -318,7 +318,7 @@ function Synopsis(options) {
     });
   });
 
-  this.snapshot = snapshot;
+  this.sum = sum;
   this.delta = delta;
   this.patch = patch;
   this.collectDeltas = collectDeltas;

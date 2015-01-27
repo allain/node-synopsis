@@ -103,22 +103,22 @@ describe('Synopsis', function() {
   });
 
   it('is sane when empty', function(done) {
-    s.snapshot = curry(s.snapshot);
+    s.sum = curry(s.sum);
 
     async.parallel([
-            asyncAssert.equal(s.snapshot(0), 0),
+            asyncAssert.equal(s.sum(0), 0),
             asyncAssert.equal(s.size(), 0)
         ], done());
   });
 
-  it('snapshot can accept no index', function(done) {
-    s.snapshot(function(err, snapshot) {
-      assert.equal(snapshot, 0);
+  it('sum can accept no index', function(done) {
+    s.sum(function(err, sum) {
+      assert.equal(sum, 0);
       done();
     });
   });
 
-  it('computes snapshot when patches are added', function(done) {
+  it('computes sum when patches are added', function(done) {
     async.series([
             s.patch(2),
             s.patch(3),
@@ -126,17 +126,17 @@ describe('Synopsis', function() {
         ], function(err, cb) {
       assert(!err, err);
 
-      s.snapshot(function(err, snapshot) {
+      s.sum(function(err, sum) {
         assert(!err, err);
 
-        assert.equal(snapshot, 5);
+        assert.equal(sum, 5);
         done();
       });
     });
   });
 
   it('can handle multiple simultaneous incoming patches', function(done) {
-    s.snapshot = curry(s.snapshot);
+    s.sum = curry(s.sum);
 
     this.timeout(30000);
 
@@ -153,7 +153,7 @@ describe('Synopsis', function() {
       if (err) done(err);
 
       async.parallel([
-                asyncAssert.equal(s.snapshot(10000), 0),
+                asyncAssert.equal(s.sum(10000), 0),
                 asyncAssert.equal(s.size(), 10000),
             ], done);
     });
@@ -173,8 +173,8 @@ describe('Synopsis', function() {
     });
   });
 
-  it('snapshot behaves as expected', function(done) {
-    s.snapshot = curry(s.snapshot);
+  it('sum behaves as expected', function(done) {
+    s.sum = curry(s.sum);
 
     async.eachSeries(range(1, 5),
       s.patch,
@@ -182,10 +182,10 @@ describe('Synopsis', function() {
         assert(!err, err);
 
         async.parallel([
-                    asyncAssert.equal(s.snapshot(1), 1),
-                    asyncAssert.equal(s.snapshot(2), 3),
-                    asyncAssert.equal(s.snapshot(3), 6),
-                    asyncAssert.equal(s.snapshot(4), 10),
+                    asyncAssert.equal(s.sum(1), 1),
+                    asyncAssert.equal(s.sum(2), 3),
+                    asyncAssert.equal(s.sum(3), 6),
+                    asyncAssert.equal(s.sum(4), 10),
                     asyncAssert.equal(s.delta(1, 2), 2),
                     asyncAssert.equal(s.delta(1, 3), 5),
                     asyncAssert.equal(s.delta(1, 4), 9),
@@ -195,13 +195,13 @@ describe('Synopsis', function() {
   });
 
   it('uses delta merging', function(done) {
-    s.snapshot = curry(s.snapshot);
+    s.sum = curry(s.sum);
 
     patchN1s(125, function(err) {
       assert(!err, err);
 
       async.parallel([
-                asyncAssert.equal(s.snapshot(5), 5),
+                asyncAssert.equal(s.sum(5), 5),
                 asyncAssert.deepEqual(s.collectDeltas(0, 4), [1, 1, 1, 1]),
                 asyncAssert.deepEqual(s.collectDeltas(0, 5), [5]),
                 asyncAssert.deepEqual(s.collectDeltas(0, 6), [5, 1]),
@@ -234,8 +234,8 @@ describe('Synopsis', function() {
     var start = Date.now();
     patchN1s(hardCount, function(err) {
       assert(!err, err);
-      s.snapshot(hardCount - 1, function(err, snapshot) {
-        assert.equal(snapshot, hardCount - 1);
+      s.sum(hardCount - 1, function(err, sum) {
+        assert.equal(sum, hardCount - 1);
 
         assert(Date.now() - start < 1000);
         done();
@@ -278,7 +278,7 @@ describe('Synopsis', function() {
       }
     });
 
-    s.snapshot = curry(s.snapshot);
+    s.sum = curry(s.sum);
     s.delta = curry(s.delta);
     s.collectDeltas = curry(s.collectDeltas);
 
@@ -327,8 +327,8 @@ describe('Synopsis', function() {
       assert(!err, err);
 
       async.parallel([
-                asyncAssert.deepEqual(s.snapshot(0), {}),
-                asyncAssert.deepEqual(s.snapshot(1), {
+                asyncAssert.deepEqual(s.sum(0), {}),
+                asyncAssert.deepEqual(s.sum(1), {
           a: [1]
         }),
                 asyncAssert.deepEqual(s.delta(0, 1), [{
@@ -354,10 +354,10 @@ describe('Synopsis', function() {
           value: 3,
           context: undefined
                 }]),
-                asyncAssert.deepEqual(s.snapshot(5), {
+                asyncAssert.deepEqual(s.sum(5), {
           a: [1, 2, 3, 4, 5]
         }),
-                asyncAssert.deepEqual(s.snapshot(8), {
+                asyncAssert.deepEqual(s.sum(8), {
           a: [1, 2, 3, 4, 5, 6, 7, 8]
         }),
                 asyncAssert.deepEqual(s.collectDeltas(2, 3), [
