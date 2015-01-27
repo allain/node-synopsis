@@ -166,12 +166,16 @@ function Synopsis(options) {
         snapshot(count - scale, function(err, before) {
           if (err) return next(err);
 
-          store.set(count + '-' + scale, differ(before, after), function(err) {
+          differ(before, after, function(err, diff) {
             if (err) return next(err);
 
-            scale *= granularity;
-            next();
-          });
+						store.set(count + '-' + scale, diff, function(err) {
+							if (err) return next(err);
+
+							scale *= granularity;
+							next();
+						});
+					});
         });
       }, cb);
     });
@@ -241,7 +245,7 @@ function Synopsis(options) {
           result = patcher(result, delta);
         });
 
-        cb(null, differ(start, result));
+        differ(start, result, cb);
       });
     });
   }

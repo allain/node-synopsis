@@ -72,8 +72,8 @@ describe('Synopsis', function() {
 
         return prev + patch;
       },
-      differ: function(before, after) {
-        return after - before;
+      differ: function(before, after, cb) {
+        cb(null, after - before);
       }
     });
 
@@ -94,8 +94,8 @@ describe('Synopsis', function() {
       patcher: function(prev, patch) {
         return prev + patch;
       },
-      differ: function(before, after) {
-        return after - before;
+      differ: function(before, after, cb) {
+        cb(null, after - before);
       }
     }).on('ready', function() {
       done();
@@ -266,15 +266,15 @@ describe('Synopsis', function() {
   });
 
   it('works with non-trivial deltas', function(done) {
-    this.timeout(3000000);
+    //this.timeout(30000);
     var s = new Synopsis({
       start: {},
       granularity: 2,
       patcher: function(doc, patch) {
         return jiff.patch(patch, doc);
       },
-      differ: function(before, after) {
-        return jiff.diff(before, after);
+      differ: function(before, after, cb) {
+        cb(null, jiff.diff(before, after));
       }
     });
 
