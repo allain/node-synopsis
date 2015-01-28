@@ -12,7 +12,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "http://www.github.com/allain/synopsis"
+    "url": "http://www.github.com/allain/node-synopsis"
   },
   "author": "Allain Lalonde <allain.lalonde@gmail.com>",
   "license": "ISC",
