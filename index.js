@@ -1,10 +1,10 @@
 module.exports = Synopsis;
 
+var LRU = require('node-lru');
 var assert = require('assert');
 var async = require('async');
 var values = require('amp-values');
 var Duplex = require('stream').Duplex;
-
 var EventEmitter = require('events').EventEmitter;
 
 var inherits = require('util').inherits;
@@ -18,19 +18,36 @@ function Synopsis(options) {
 
   var self = this;
 
+  var cache = new LRU({
+    expires: 5 * 60 * 1000,
+    capacity: 100
+  });
+
   EventEmitter.call(this);
 
   assert(typeof options === 'object');
 
+  var patcher = options.patcher;
+  var differ = options.differ;
+
   var granularity = options.granularity || 5;
 
   var count;
+  var tail;
 
   var deltaCache = this.deltaCache = {};
-  var differ = options.differ;
-  var patcher = options.patcher;
 
   var store = decorateStore(options.store || require('./stores/memory')());
+  var innerGet = store.get;
+  store.get = function (key, cb) {
+    var cached = cache.get(key);
+    if (cached) return cb(null, cached);
+
+    innerGet(key, function (err, value) {
+      cache.set(key, value);
+      cb(err, value);
+    });
+  };
 
   function snapshot(index, cb) {
     if (typeof cb === 'undefined') {
@@ -46,29 +63,29 @@ function Synopsis(options) {
       return cb(null, options.start);
     }
 
-    delta(0, index, function(err, d) {
+    delta(0, index, function (err, d) {
       if (err) return cb(err);
 
-      setImmediate(function() {
+      setImmediate(function () {
         patcher(options.start, d, cb);
       });
     });
   }
 
-  var patchQueue = async.queue(function(task, cb) {
+  var patchQueue = async.queue(function (task, cb) {
     var delta = task.patch;
 
     async.series([
-      function(cb) {
+      function (cb) {
         store.set((count + 1) + '-1', delta, cb);
-      },
-      function(cb) {
+   },
+      function (cb) {
         updateAggregates(delta, count + 1, cb);
       }
-    ], function(err) {
+    ], function (err) {
       if (err) return cb(err);
 
-      store.set('count', ++count, function(err) {
+      store.set('count', ++count, function (err) {
         self.emit('patched', delta);
         cb();
       });
@@ -88,7 +105,7 @@ function Synopsis(options) {
   }
 
   function testNewPatch(patch, cb) {
-    snapshot(function(err, s) {
+    snapshot(function (err, s) {
       if (err) return cb(err);
 
       patcher(s, patch, cb);
@@ -103,13 +120,13 @@ function Synopsis(options) {
     }
 
     async.waterfall([
-      function(cb) {
+      function (cb) {
         snapshot(count - 1, cb);
    },
-      function(prevSnapshot, cb) {
+      function (prevSnapshot, cb) {
         patcher(prevSnapshot, delta, cb);
    }
-  ], function(err, after) {
+  ], function (err, after) {
       if (err) return cb(err);
 
       var scales = [];
@@ -120,21 +137,17 @@ function Synopsis(options) {
       }
 
       var aggregates = {};
-      async.eachSeries(scales, function(scale, cb) {
-        async.waterfall([
-     function(cb) {
-            snapshot(count - scale, cb);
-     },
-     function(before, cb) {
-            differ(before, after, cb);
-     }
-    ], function(err, diff) {
+      async.eachSeries(scales, function (scale, cb) {
+        snapshot(count - scale, function (err, before) {
           if (err) return cb(err);
+          differ(before, after, function (err, diff) {
+            if (err) return cb(err);
 
-          aggregates[count + '-' + scale] = diff;
-          cb();
+            aggregates[count + '-' + scale] = diff;
+            cb();
+          });
         });
-      }, function(err) {
+      }, function (err) {
         if (err) return cb(err);
 
         store.setAll(aggregates, cb);
@@ -173,7 +186,7 @@ function Synopsis(options) {
     return keys.reverse();
   }
 
-  function collectDeltas(idx1, idx2, cb) {
+  var collectDeltas = function (idx1, idx2, cb) {
     if (idx2 > count) return cb(new Error('index out of range: ' + idx2));
     if (idx1 > idx2) return cb(new Error('delta in incorrect order: ' + idx1 + ' > ' + idx2));
 
@@ -181,37 +194,39 @@ function Synopsis(options) {
 
     var keys = computeIntervalKeys(idx1, idx2);
 
-    store.getAll(keys, function(err, deltaMap) {
+    store.getAll(keys, function (err, deltaMap) {
       if (err) return cb(err);
 
-      cb(null, values(deltaMap));
+      cb(null, Object.keys(deltaMap).map(function (key) {
+        return deltaMap[key];
+      }));
     });
-  }
+  };
 
-  function delta(idx1, idx2, cb) {
+  var delta = function (idx1, idx2, cb) {
     if (typeof cb === 'undefined') {
       cb = idx2;
       idx2 = count;
     }
 
     async.parallel({
-      deltas: function(cb) {
+      deltas: function (cb) {
         collectDeltas(idx1, idx2, cb);
       },
-      start: function(cb) {
+      start: function (cb) {
         snapshot(idx1, cb);
       }
-    }, function(err, result) {
-      async.reduce(result.deltas, result.start, patcher, function(err, end) {
+    }, function (err, result) {
+      async.reduce(result.deltas, result.start, patcher, function (err, end) {
         differ(result.start, end, cb);
       });
     });
-  }
+  };
 
   function size(cb) {
     if (count || count === 0) return cb(null, count);
 
-    store.get('count', function(err, c) {
+    store.get('count', function (err, c) {
       if (err) return cb(err);
 
       count = c || 0;
@@ -233,7 +248,7 @@ function Synopsis(options) {
     if (startIndex === count) {
       streamPatches();
     } else {
-      delta(startIndex, count, function(err, patch) {
+      delta(startIndex, count, function (err, patch) {
         stream.push([patch, count]);
         streamPatches();
       });
@@ -248,7 +263,7 @@ function Synopsis(options) {
       var flowing = false;
       var pendingPatches = [];
 
-      self.on('patched', function(patch) {
+      self.on('patched', function (patch) {
         if (flowing) {
           flowing = stream.push([patch, count]);
         } else {
@@ -256,11 +271,11 @@ function Synopsis(options) {
         }
       });
 
-      stream._read = function() {
+      stream._read = function () {
         flowing = true;
         if (pendingPatches.length) {
           var last = pendingPatches[pendingPatches.length - 1];
-          self.delta(pendingPatches[0] - 1, count, function(err, delta) {
+          self.delta(pendingPatches[0] - 1, count, function (err, delta) {
             flowing = stream.push([delta, last]);
             if (flowing) {
               pendingPatches = [];
@@ -269,8 +284,8 @@ function Synopsis(options) {
         }
       };
 
-      stream._write = function(chunk, encoding, next) {
-        self.patch(chunk, function(err) {
+      stream._write = function (chunk, encoding, next) {
+        self.patch(chunk, function (err) {
           if (err) {
             stream.push({
               error: 'patch failed',
@@ -287,15 +302,19 @@ function Synopsis(options) {
     }
   }
 
-  size(function(err) {
+  size(function (err) {
     if (err) {
       //TODO: Expose this failure to users
       return console.error(err);
     }
 
-    process.nextTick(function() {
-      self.emit('ready');
+    store.get('head', function (err, storedHead) {
+      head = storedHead || 0;
+      process.nextTick(function () {
+        self.emit('ready');
+      });
     });
+
   });
 
   this.snapshot = snapshot;
@@ -308,25 +327,25 @@ function Synopsis(options) {
 
 function decorateStore(store) {
   if (!store.setAll) {
-    store.setAll = function(map, cb) {
-      async.eachSeries(Object.keys(map), function(key, cb) {
+    store.setAll = function (map, cb) {
+      async.eachSeries(Object.keys(map), function (key, cb) {
         store.set(key, map[key], cb);
       }, cb);
     };
   }
 
   if (!store.getAll) {
-    store.getAll = function(keys, cb) {
+    store.getAll = function (keys, cb) {
       var result = {};
-      async.eachSeries(keys, function(key, cb) {
-        store.get(key, function(err, val) {
+      async.eachSeries(keys, function (key, cb) {
+        store.get(key, function (err, val) {
           if (err) return cb(err);
 
           result[key] = val;
 
           cb();
         });
-      }, function(err) {
+      }, function (err) {
         cb(err, result);
       });
     };

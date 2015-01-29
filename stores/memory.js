@@ -1,11 +1,11 @@
-module.exports = function(options) {
+module.exports = function (options) {
   var cache = [];
 
   return {
-    get: function(key, cb) {
+    get: function (key, cb) {
       return cb(null, cache[key]);
     },
-    set: function(key, value, cb) {
+    set: function (key, value, cb) {
       cache[key] = value;
       cb();
     }
