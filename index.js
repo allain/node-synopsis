@@ -58,21 +58,18 @@ function Synopsis(options) {
   var patchQueue = async.queue(function(task, cb) {
     var delta = task.patch;
 
-    ++count;
-
-    //store patch and count atomically
-    var storeDoc = {};
-    storeDoc[count + '-1'] = delta;
-    storeDoc.count = count;
-
-    store.setAll(storeDoc, function(err) {
+    async.series([
+      function(cb) {
+        store.set((count + 1) + '-1', delta, cb);
+      },
+      function(cb) {
+        updateAggregates(delta, count + 1, cb);
+      }
+    ], function(err) {
       if (err) return cb(err);
 
-      updateAggregates(delta, function(err) {
-        if (err) return cb(err);
-
+      store.set('count', ++count, function(err) {
         self.emit('patched', delta);
-
         cb();
       });
     });
@@ -98,37 +95,49 @@ function Synopsis(options) {
     });
   }
 
-  function updateAggregates(delta, cb) {
+  function updateAggregates(delta, count, cb) {
     var scale = granularity;
 
     if (scale > count || count % scale !== 0) {
       return setImmediate(cb);
     }
 
-    var after;
-    snapshot(count - 1, function(err, prevSum) {
+    async.waterfall([
+      function(cb) {
+        snapshot(count - 1, cb);
+   },
+      function(prevSnapshot, cb) {
+        patcher(prevSnapshot, delta, cb);
+   }
+  ], function(err, after) {
       if (err) return cb(err);
 
-      patcher(prevSum, delta, function(err, after) {
+      var scales = [];
+
+      while (scale <= count && count % scale === 0) {
+        scales.push(scale);
+        scale *= granularity;
+      }
+
+      var aggregates = {};
+      async.eachSeries(scales, function(scale, cb) {
+        async.waterfall([
+					function(cb) {
+						snapshot(count - scale, cb);
+					},
+					function(before, cb) {
+						differ(before, after, cb);
+					}
+				], function(err, diff) {
+          if (err) return cb(err);
+
+          aggregates[count + '-' + scale] = diff;
+          cb();
+        });
+      }, function(err) {
         if (err) return cb(err);
-        async.whilst(function() {
-          return scale <= count && count % scale === 0;
-        }, function(next) {
-          snapshot(count - scale, function(err, before) {
-            if (err) return next(err);
 
-            differ(before, after, function(err, diff) {
-              if (err) return next(err);
-
-              store.set(count + '-' + scale, diff, function(err) {
-                if (err) return next(err);
-
-                scale *= granularity;
-                next();
-              });
-            });
-          });
-        }, cb);
+        store.setAll(aggregates, cb);
       });
     });
   }
@@ -185,23 +194,16 @@ function Synopsis(options) {
       idx2 = count;
     }
 
-    collectDeltas(idx1, idx2, function(err, deltas) {
-      if (err) return cb(err);
-
-      snapshot(idx1, function(err, start) {
-        if (err) return cb(err);
-
-        var result = start;
-
-        async.eachSeries(deltas, function(delta, cb) {
-          patcher(result, delta, function(err, newResult) {
-            if (err) return cb(err);
-            result = newResult;
-            cb();
-          });
-        }, function(err) {
-          differ(start, result, cb);
-        });
+    async.parallel({
+      deltas: function(cb) {
+        collectDeltas(idx1, idx2, cb);
+      },
+      start: function(cb) {
+        snapshot(idx1, cb);
+      }
+    }, function(err, result) {
+      async.reduce(result.deltas, result.start, patcher, function(err, end) {
+        differ(result.start, end, cb);
       });
     });
   }
