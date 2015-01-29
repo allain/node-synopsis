@@ -29,9 +29,36 @@ function Synopsis(options) {
   var count;
   var tail;
 
+  var emptyPatch;
+  var emptyPatchJson;
+
+  differ(options.start, options.start, function (err, patch) {
+    emptyPatch = patch;
+    emptyPatchJson = JSON.stringify(patch);
+  });
+
   var deltaCache = this.deltaCache = {};
 
   var store = decorateStore(options.store || require('./stores/memory')());
+
+  function getInterval(intervalKey, cb) {
+    store.get(intervalKey, function (err, p) {
+      if (err) return cb(err);
+      if (p) {
+        cb(null, p);
+      } else {
+        cb(null, emptyPatch);
+      }
+    });
+  }
+
+  function setInterval(intervalKey, value, cb) {
+    if (JSON.stringify(value) === emptyPatchJson) {
+      store.remove(intervalKey, cb);
+    } else {
+      store.set(intervalKey, value, cb);
+    }
+  }
 
   function snapshot(index, cb) {
     if (typeof cb === 'undefined') {
@@ -47,6 +74,7 @@ function Synopsis(options) {
       return cb(null, options.start);
     }
 
+
     delta(0, index, function (err, d) {
       if (err) return cb(err);
 
@@ -57,20 +85,20 @@ function Synopsis(options) {
   }
 
   var patchQueue = async.queue(function (task, cb) {
-    var delta = task.patch;
+    var patch = task.patch;
 
     async.series([
       function (cb) {
-        store.set((count + 1) + '-1', delta, cb);
+        setInterval((count + 1) + '-1', patch, cb);
       },
       function (cb) {
-        updateAggregates(delta, count + 1, cb);
+        computeAggregates(patch, count + 1, cb);
       }
     ], function (err) {
       if (err) return cb(err);
 
       store.set('count', ++count, function (err) {
-        self.emit('patched', delta);
+        self.emit('patched', patch);
         cb();
       });
     });
@@ -96,7 +124,7 @@ function Synopsis(options) {
     });
   }
 
-  function updateAggregates(delta, count, cb) {
+  function computeAggregates(delta, count, cb) {
     var scale = granularity;
 
     if (scale > count || count % scale !== 0) {
@@ -124,18 +152,20 @@ function Synopsis(options) {
       async.eachSeries(scales, function (scale, cb) {
         snapshot(count - scale, function (err, before) {
           if (err) return cb(err);
+
           differ(before, after, function (err, diff) {
             if (err) return cb(err);
 
-            aggregates[count + '-' + scale] = diff;
-            cb();
+            setInterval(count + '-' + scale, diff, cb);
           });
         });
-      }, function (err) {
-        if (err) return cb(err);
+      }, cb);
+    });
+  }
 
-        store.setAll(aggregates, cb);
-      });
+  function updateAggregates(count, cb) {
+    getInterval(count + '-1', function(err, patch) {
+      computeAggregates(patch, count, cb);
     });
   }
 
@@ -178,12 +208,13 @@ function Synopsis(options) {
 
     var keys = computeIntervalKeys(idx1, idx2);
 
-    store.getAll(keys, function (err, deltaMap) {
-      if (err) return cb(err);
-
-      cb(null, Object.keys(deltaMap).map(function (key) {
-        return deltaMap[key];
-      }));
+    async.reduce(keys, [], function (deltas, key, cb) {
+      getInterval(key, function (err, delta) {
+        deltas.push(delta);
+        cb(null, deltas);
+      });
+    }, function (err, deltas) {
+      cb(err, deltas);
     });
   };
 
@@ -192,6 +223,12 @@ function Synopsis(options) {
       cb = idx2;
       idx2 = count;
     }
+
+    if (idx1 === idx2) {
+      return cb(null, emptyPatch);
+    }
+
+    assert(typeof cb === 'function');
 
     async.parallel({
       deltas: function (cb) {
@@ -286,14 +323,46 @@ function Synopsis(options) {
     }
   }
 
+  function compact(cb) {
+    if (tail + 1 >= count) {
+      return cb();
+    }
+
+    assert(typeof cb === 'function');
+    tail++;
+
+    delta(tail - 1, tail + 1, function (err, delta) {
+      store.set((tail + 1) + '-1', delta, function (err) {
+        store.remove(tail + '-1', function(err) {
+          updateAggregates(tail, function(err) {
+            updateAggregates(tail + 1, function(err) {
+              var indexes = {};
+              var scale = granularity;
+              var nextIndex;
+
+              while (scale <= count ) {
+                nextIndex = Math.ceil((tail + 1) / scale) * scale;
+                if (nextIndex > count) break;
+                indexes[nextIndex] = true;
+                scale *= granularity;
+              }
+
+              async.eachSeries(Object.keys(indexes), updateAggregates, cb);
+            });
+          });
+        });
+      });
+    });
+  }
+
   size(function (err) {
     if (err) {
       //TODO: Expose this failure to users
       return console.error(err);
     }
 
-    store.get('head', function (err, storedHead) {
-      head = storedHead || 0;
+    store.get('tail', function (err, storedTail) {
+      tail = storedTail || 0;
       process.nextTick(function () {
         self.emit('ready');
       });
@@ -305,8 +374,10 @@ function Synopsis(options) {
   this.delta = delta;
   this.patch = patch;
   this.collectDeltas = collectDeltas;
+  this.computeIntervalKeys = computeIntervalKeys;
   this.size = size;
   this.createStream = createStream;
+  this.compact = compact;
 }
 
 function decorateStore(store) {
@@ -315,23 +386,6 @@ function decorateStore(store) {
       async.eachSeries(Object.keys(map), function (key, cb) {
         store.set(key, map[key], cb);
       }, cb);
-    };
-  }
-
-  if (!store.getAll) {
-    store.getAll = function (keys, cb) {
-      var result = {};
-      async.eachSeries(keys, function (key, cb) {
-        store.get(key, function (err, val) {
-          if (err) return cb(err);
-
-          result[key] = val;
-
-          cb();
-        });
-      }, function (err) {
-        cb(err, result);
-      });
     };
   }
 

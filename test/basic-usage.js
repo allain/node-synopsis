@@ -3,30 +3,7 @@ var async = require('async');
 var curry = require('curry');
 var range = require('amp-range');
 var Synopsis = require('../index.js');
-
-// Little utility that allows me to more easily test async functions
-var asyncAssert = {
-  equal: curry(function (generator, expected, cb) {
-    generator(function (err, actual) {
-      try {
-        assert.equal(actual, expected);
-        cb();
-      } catch (e) {
-        cb(e);
-      }
-    });
-  }),
-  deepEqual: curry(function (generator, expected, cb) {
-    generator(function (err, actual) {
-      try {
-        assert.equal(JSON.stringify(actual), JSON.stringify(expected));
-        cb();
-      } catch (e) {
-        cb(e);
-      }
-    });
-  })
-};
+var aassert = require('./async-assert.js');
 
 describe('basic usage', function () {
   var s;
@@ -83,8 +60,8 @@ describe('basic usage', function () {
     s.snapshot = curry(s.snapshot);
 
     async.parallel([
-      asyncAssert.equal(s.snapshot(0), 0),
-      asyncAssert.equal(s.size(), 0)
+      aassert.equal(s.snapshot(0), 0),
+      aassert.equal(s.size(), 0)
     ], done());
   });
 
@@ -99,7 +76,7 @@ describe('basic usage', function () {
     async.series([
       s.patch(2),
       s.patch(3),
-      asyncAssert.equal(s.size(), 2)
+      aassert.equal(s.size(), 2)
     ], function (err, cb) {
       assert(!err, err);
 
@@ -129,8 +106,8 @@ describe('basic usage', function () {
       if (err) done(err);
 
       async.parallel([
-        asyncAssert.equal(s.snapshot(1000), 0),
-        asyncAssert.equal(s.size(), 1000),
+        aassert.equal(s.snapshot(1000), 0),
+        aassert.equal(s.size(), 1000),
       ], done);
     });
   });
@@ -158,14 +135,14 @@ describe('basic usage', function () {
         assert(!err, err);
 
         async.parallel([
-          asyncAssert.equal(s.snapshot(1), 1),
-          asyncAssert.equal(s.snapshot(2), 3),
-          asyncAssert.equal(s.snapshot(3), 6),
-          asyncAssert.equal(s.snapshot(4), 10),
-          asyncAssert.equal(s.delta(1, 2), 2),
-          asyncAssert.equal(s.delta(1, 3), 5),
-          asyncAssert.equal(s.delta(1, 4), 9),
-          asyncAssert.equal(s.delta(2, 4), 7)
+          aassert.equal(s.snapshot(1), 1),
+          aassert.equal(s.snapshot(2), 3),
+          aassert.equal(s.snapshot(3), 6),
+          aassert.equal(s.snapshot(4), 10),
+          aassert.equal(s.delta(1, 2), 2),
+          aassert.equal(s.delta(1, 3), 5),
+          aassert.equal(s.delta(1, 4), 9),
+          aassert.equal(s.delta(2, 4), 7)
         ], done);
       });
   });
@@ -177,13 +154,13 @@ describe('basic usage', function () {
       assert(!err, err);
 
       async.parallel([
-        asyncAssert.equal(s.snapshot(5), 5),
-        asyncAssert.deepEqual(s.collectDeltas(0, 4), [1, 1, 1, 1]),
-        asyncAssert.deepEqual(s.collectDeltas(0, 5), [5]),
-        asyncAssert.deepEqual(s.collectDeltas(0, 6), [5, 1]),
-        asyncAssert.deepEqual(s.collectDeltas(0, 10), [5, 5]),
-        asyncAssert.deepEqual(s.collectDeltas(0, 124), [25, 25, 25, 25, 5, 5, 5, 5, 1, 1, 1, 1]),
-        asyncAssert.deepEqual(s.collectDeltas(0, 125), [125]),
+        aassert.equal(s.snapshot(5), 5),
+        aassert.deepEqual(s.collectDeltas(0, 4), [1, 1, 1, 1]),
+        aassert.deepEqual(s.collectDeltas(0, 5), [5]),
+        aassert.deepEqual(s.collectDeltas(0, 6), [5, 1]),
+        aassert.deepEqual(s.collectDeltas(0, 10), [5, 5]),
+        aassert.deepEqual(s.collectDeltas(0, 124), [25, 25, 25, 25, 5, 5, 5, 5, 1, 1, 1, 1]),
+        aassert.deepEqual(s.collectDeltas(0, 125), [125]),
       ], done);
     });
   });
@@ -193,12 +170,12 @@ describe('basic usage', function () {
       assert(!err, err);
 
       async.parallel([
-        asyncAssert.equal(s.delta(0, 0), 0),
-        asyncAssert.equal(s.delta(0, 1), 1),
-        asyncAssert.equal(s.delta(1, 2), 1),
-        asyncAssert.equal(s.delta(0, 50), 50),
-        asyncAssert.equal(s.delta(1, 50), 49),
-        asyncAssert.equal(s.delta(951, 1000), 49)
+        aassert.equal(s.delta(0, 0), 0),
+        aassert.equal(s.delta(0, 1), 1),
+        aassert.equal(s.delta(1, 2), 1),
+        aassert.equal(s.delta(0, 50), 50),
+        aassert.equal(s.delta(1, 50), 49),
+        aassert.equal(s.delta(951, 1000), 49)
       ], done);
     });
   });
@@ -232,11 +209,11 @@ describe('basic usage', function () {
 
   it('size works', function (done) {
     async.series([
-      asyncAssert.equal(s.size(), 0),
+      aassert.equal(s.size(), 0),
       s.patch(1),
-      asyncAssert.equal(s.size(), 1),
+      aassert.equal(s.size(), 1),
       s.patch(2),
-      asyncAssert.equal(s.size(), 2)
+      aassert.equal(s.size(), 2)
     ], done);
   });
 });
