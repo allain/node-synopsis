@@ -1,6 +1,5 @@
 module.exports = Synopsis;
 
-var LRU = require('node-lru');
 var assert = require('assert');
 var async = require('async');
 var values = require('amp-values');
@@ -18,11 +17,6 @@ function Synopsis(options) {
 
   var self = this;
 
-  var cache = new LRU({
-    expires: 5 * 60 * 1000,
-    capacity: 100
-  });
-
   EventEmitter.call(this);
 
   assert(typeof options === 'object');
@@ -38,16 +32,6 @@ function Synopsis(options) {
   var deltaCache = this.deltaCache = {};
 
   var store = decorateStore(options.store || require('./stores/memory')());
-  var innerGet = store.get;
-  store.get = function (key, cb) {
-    var cached = cache.get(key);
-    if (cached) return cb(null, cached);
-
-    innerGet(key, function (err, value) {
-      cache.set(key, value);
-      cb(err, value);
-    });
-  };
 
   function snapshot(index, cb) {
     if (typeof cb === 'undefined') {

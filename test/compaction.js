@@ -1,39 +1,8 @@
 var assert = require('assert');
-var jiff = require('jiff');
 var async = require('async');
 var curry = require('curry');
 var range = require('amp-range');
-var Duplex = require('stream').Duplex;
-var stdout = require('stdout');
 var Synopsis = require('../index.js');
-var Writable = require('stream').Writable;
-
-function expectStream(expected, done) {
-  assert(Array.isArray(expected));
-
-  var stream = new Writable({
-    objectMode: true
-  });
-
-  stream._write = function (chunk, encoding, cb) {
-    if (expected.length === 0) {
-      assert(false, 'write occurred after no writes expected');
-    }
-
-    var expectedChunk = expected.shift();
-    assert.deepEqual(chunk, expectedChunk);
-
-    if (expected.length === 0) {
-      setTimeout(function () {
-        done();
-      }, 10);
-    }
-
-    cb();
-  };
-
-  return stream;
-}
 
 // Little utility that allows me to more easily test async functions
 var asyncAssert = {

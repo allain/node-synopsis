@@ -1,10 +1,8 @@
 var assert = require('assert');
-var jiff = require('jiff');
 var async = require('async');
 var curry = require('curry');
 var range = require('amp-range');
 var Duplex = require('stream').Duplex;
-var stdout = require('stdout');
 var Synopsis = require('../index.js');
 var Writable = require('stream').Writable;
 
@@ -34,30 +32,6 @@ function expectStream(expected, done) {
 
   return stream;
 }
-
-// Little utility that allows me to more easily test async functions
-var asyncAssert = {
-  equal: curry(function (generator, expected, cb) {
-    generator(function (err, actual) {
-      try {
-        assert.equal(actual, expected);
-        cb();
-      } catch (e) {
-        cb(e);
-      }
-    });
-  }),
-  deepEqual: curry(function (generator, expected, cb) {
-    generator(function (err, actual) {
-      try {
-        assert.equal(JSON.stringify(actual), JSON.stringify(expected));
-        cb();
-      } catch (e) {
-        cb(e);
-      }
-    });
-  })
-};
 
 describe('streaming', function () {
   var s;

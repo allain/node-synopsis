@@ -1,12 +1,8 @@
 var assert = require('assert');
-var jiff = require('jiff');
 var async = require('async');
 var curry = require('curry');
 var range = require('amp-range');
-var Duplex = require('stream').Duplex;
-var stdout = require('stdout');
 var Synopsis = require('../index.js');
-var Writable = require('stream').Writable;
 
 // Little utility that allows me to more easily test async functions
 var asyncAssert = {
