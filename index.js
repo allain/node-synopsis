@@ -74,7 +74,6 @@ function Synopsis(options) {
       return cb(null, options.start);
     }
 
-
     delta(0, index, function (err, d) {
       if (err) return cb(err);
 
@@ -84,24 +83,54 @@ function Synopsis(options) {
     });
   }
 
-  var patchQueue = async.queue(function (task, cb) {
+  //exists so that only 1 scary operation can be done at a time
+  var workQueue = async.queue(function (task, cb) {
     var patch = task.patch;
 
-    async.series([
-      function (cb) {
-        setInterval((count + 1) + '-1', patch, cb);
-      },
-      function (cb) {
-        computeAggregates(patch, count + 1, cb);
-      }
-    ], function (err) {
-      if (err) return cb(err);
+    if (patch) {
+      async.series([
+        function (cb) {
+          setInterval((count + 1) + '-1', patch, cb);
+        },
+        function (cb) {
+          computeAggregates(patch, count + 1, cb);
+        }
+      ], function (err) {
+        if (err) return cb(err);
 
-      store.set('count', ++count, function (err) {
-        self.emit('patched', patch);
-        cb();
+        store.set('count', ++count, function (err) {
+          self.emit('patched', patch);
+          cb();
+        });
       });
-    });
+    } else if (task.compact) {
+      tail++;
+
+      delta(tail - 1, tail + 1, function (err, delta) {
+        store.set((tail + 1) + '-1', delta, function (err) {
+          store.remove(tail + '-1', function (err) {
+            updateAggregates(tail, function (err) {
+              updateAggregates(tail + 1, function (err) {
+                var indexes = {};
+                var scale = granularity;
+                var nextIndex;
+
+                while (scale <= count) {
+                  nextIndex = Math.ceil((tail + 1) / scale) * scale;
+                  if (nextIndex > count) break;
+                  indexes[nextIndex] = true;
+                  scale *= granularity;
+                }
+
+                async.eachSeries(Object.keys(indexes), updateAggregates, function (err) {
+                  store.set('tail', tail, cb);
+                });
+              });
+            });
+          });
+        });
+      });
+    }
   }, 1);
 
   function patch(delta, cb) {
@@ -110,7 +139,7 @@ function Synopsis(options) {
     function applyPatch(err) {
       if (err) return cb(err);
 
-      patchQueue.push({
+      workQueue.push({
         patch: delta
       }, cb);
     }
@@ -164,7 +193,7 @@ function Synopsis(options) {
   }
 
   function updateAggregates(count, cb) {
-    getInterval(count + '-1', function(err, patch) {
+    getInterval(count + '-1', function (err, patch) {
       computeAggregates(patch, count, cb);
     });
   }
@@ -328,31 +357,9 @@ function Synopsis(options) {
       return cb();
     }
 
-    assert(typeof cb === 'function');
-    tail++;
-
-    delta(tail - 1, tail + 1, function (err, delta) {
-      store.set((tail + 1) + '-1', delta, function (err) {
-        store.remove(tail + '-1', function(err) {
-          updateAggregates(tail, function(err) {
-            updateAggregates(tail + 1, function(err) {
-              var indexes = {};
-              var scale = granularity;
-              var nextIndex;
-
-              while (scale <= count ) {
-                nextIndex = Math.ceil((tail + 1) / scale) * scale;
-                if (nextIndex > count) break;
-                indexes[nextIndex] = true;
-                scale *= granularity;
-              }
-
-              async.eachSeries(Object.keys(indexes), updateAggregates, cb);
-            });
-          });
-        });
-      });
-    });
+    workQueue.push({
+      compact: 1
+    }, cb);
   }
 
   size(function (err) {

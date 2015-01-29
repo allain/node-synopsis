@@ -118,9 +118,9 @@ describe('compaction', function () {
 
   it('compacting right up to the end works as expected', function (done) {
     patchN1s(8, function () {
-      var deltaRange = curry(function(start, end, size, cb) {
-        async.reduce(range(start, end + 1 - size), [], function(deltas, index, cb) {
-          s.delta(index, index + size, function(err, delta) {
+      var deltaRange = curry(function (start, end, size, cb) {
+        async.reduce(range(start, end + 1 - size), [], function (deltas, index, cb) {
+          s.delta(index, index + size, function (err, delta) {
             deltas.push(delta);
             cb(null, deltas);
           });
@@ -128,7 +128,7 @@ describe('compaction', function () {
       });
 
       async.series([
-				s.compact(),
+        s.compact(),
         aassert.deepEqual(deltaRange(0, 8, 1), [0, 2, 1, 1, 1, 1, 1, 1]),
         aassert.deepEqual(deltaRange(0, 8, 2), [2, 3, 2, 2, 2, 2, 2]),
         aassert.deepEqual(deltaRange(0, 8, 3), [3, 4, 3, 3, 3, 3]),
@@ -205,7 +205,6 @@ describe('compaction', function () {
         aassert.deepEqual(deltaRange(0, 8, 8), [8]),
 
       ], done);
-
 
     });
   });

@@ -17,7 +17,7 @@ module.exports = function (options) {
       cb();
     },
 
-    dump: function(label) {
+    dump: function (label) {
       console.log(label, cache);
     }
   };
