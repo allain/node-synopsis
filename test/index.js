@@ -142,7 +142,7 @@ describe('Synopsis', function() {
     this.timeout(30000);
 
     var patchOps = [];
-    async.parallel(range(10000).map(function(n) {
+    async.parallel(range(1000).map(function(n) {
       return function(cb) {
         setImmediate(function() {
           var val = (n % 2) * 2 - 1;
@@ -154,8 +154,8 @@ describe('Synopsis', function() {
       if (err) done(err);
 
       async.parallel([
-                asyncAssert.equal(s.snapshot(10000), 0),
-                asyncAssert.equal(s.size(), 10000),
+                asyncAssert.equal(s.snapshot(1000), 0),
+                asyncAssert.equal(s.size(), 1000),
             ], done);
     });
   });
@@ -228,7 +228,7 @@ describe('Synopsis', function() {
     });
   });
 
-  var hardCount = 1000;
+  var hardCount = 10000;
   it('has reasonable speed for ' + hardCount + ' patches', function(done) {
     this.timeout(10000);
 
@@ -238,7 +238,7 @@ describe('Synopsis', function() {
       s.snapshot(hardCount - 1, function(err, snapshot) {
         assert.equal(snapshot, hardCount - 1);
 
-        assert(Date.now() - start < 1000);
+        assert(Date.now() - start < 10000);
         done();
       });
     });
@@ -517,7 +517,7 @@ describe('Synopsis', function() {
       });
     });
 
-    // Disabling until I either level up or find someone who already has 
+    // Disabling until I figure out how to properly test backpressure
     it.skip('pausing stream causes effective delta to be sent when resumed', function(done) {
       s.createStream(function(err, stream) {
         assert(!err);
@@ -530,6 +530,7 @@ describe('Synopsis', function() {
             assert.deepEqual(update, [2, 102]);
             done();
           });
+
           s.patch(1, function(err) {
             s.patch(1, function(err) {
               stream.resume();

@@ -30,24 +30,7 @@ function Synopsis(options) {
   var differ = options.differ;
   var patcher = options.patcher;
 
-  var store = options.store || (function() {
-    var cache = [];
-    return {
-      get: function(key, cb) {
-        return cb(null, cache[key]);
-      },
-      set: function(key, value, cb) {
-        cache[key] = value;
-        cb();
-      },
-      setAll: function(map, cb) {
-        var self = this;
-        async.eachSeries(Object.keys(map), function(key, cb) {
-          self.set(key, map[key], cb);
-        }, cb);
-      }
-    };
-  })();
+  var store = options.store || require('./stores/memory')();
 
   if (!store.setAll) {
     store.setAll = function(map, cb) {
@@ -69,9 +52,7 @@ function Synopsis(options) {
           cb();
         });
       }, function(err) {
-        if (err) return cb(err);
-
-        return cb(null, result);
+        cb(err, result);
       });
     };
   }
@@ -287,13 +268,29 @@ function Synopsis(options) {
       // in the event that the stream is too slow to keep up.
       // It should compute the best delta when that happens
 
-      var pendingDelta;
+			var flowing = false;
+      var pendingPatches = [];
 
       self.on('patched', function(patch) {
-        stream.push([patch, count]);
+        if (flowing) {
+					flowing = stream.push([patch, count]);
+				} else {
+					pendingPatches.push(count);	
+				}
       });
 
-      stream._read = function() {};
+      stream._read = function() {
+        flowing = true;
+				if (pendingPatches.length) {
+					var last = pendingPatches[pendingPatches.length - 1];
+					self.delta(pendingPatches[0] - 1, count, function(err, delta) {
+						flowing = stream.push([delta, last]);
+            if (flowing) {
+							pendingPatches = [];
+						}
+					});
+				}
+			};
 
       stream._write = function(chunk, encoding, next) {
         self.patch(chunk, function(err) {
