@@ -62,7 +62,7 @@ describe('streaming', function () {
     s.patch = curry(s.patch);
     s.delta = curry(s.delta);
     s.collectDeltas = curry(s.collectDeltas);
-    s.size = curry(s.size);
+    s.compact = curry(s.compact);
 
     s.on('ready', function () {
       done();

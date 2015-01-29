@@ -34,7 +34,8 @@ describe('basic usage', function () {
     s.patch = curry(s.patch);
     s.delta = curry(s.delta);
     s.collectDeltas = curry(s.collectDeltas);
-    s.size = curry(s.size);
+    s.stats = curry(s.stats);
+    s.compact = curry(s.compact);
 
     s.on('ready', function () {
       done();
@@ -61,7 +62,10 @@ describe('basic usage', function () {
 
     async.parallel([
       aassert.equal(s.snapshot(0), 0),
-      aassert.equal(s.size(), 0)
+      aassert.deepEqual(s.stats(), {
+        head: 0,
+        tail: 0
+      })
     ], done());
   });
 
@@ -76,7 +80,10 @@ describe('basic usage', function () {
     async.series([
       s.patch(2),
       s.patch(3),
-      aassert.equal(s.size(), 2)
+      aassert.deepEqual(s.stats(), {
+        head: 2,
+        tail: 0
+      })
     ], function (err, cb) {
       assert(!err, err);
 
@@ -107,7 +114,10 @@ describe('basic usage', function () {
 
       async.parallel([
         aassert.equal(s.snapshot(1000), 0),
-        aassert.equal(s.size(), 1000),
+        aassert.deepEqual(s.stats(), {
+          head: 1000,
+          tail: 0
+        }),
       ], done);
     });
   });
@@ -207,13 +217,27 @@ describe('basic usage', function () {
     });
   });
 
-  it('size works', function (done) {
+  it('stats works', function (done) {
     async.series([
-      aassert.equal(s.size(), 0),
+      aassert.deepEqual(s.stats(), {
+        head: 0,
+        tail: 0
+      }),
       s.patch(1),
-      aassert.equal(s.size(), 1),
+      aassert.deepEqual(s.stats(), {
+        head: 1,
+        tail: 0
+      }),
       s.patch(2),
-      aassert.equal(s.size(), 2)
+      aassert.deepEqual(s.stats(), {
+        head: 2,
+        tail: 0
+      }),
+      s.compact(),
+      aassert.deepEqual(s.stats(), {
+        head: 2,
+        tail: 1
+      })
     ], done);
   });
 });
