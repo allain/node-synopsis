@@ -508,6 +508,33 @@ describe('Synopsis', function () {
   });
 
   describe('streaming', function () {
+    beforeEach(function (done) {
+      // Uber simple Synopsis example that just calculates the diff
+      s = new Synopsis({
+        start: 0,
+        granularity: 5,
+        patcher: function (prev, patch, cb) {
+          if (patch === -2 /** Arbitrary to test failures */ ) {
+            return cb(new Error('Invalid Patch'));
+          }
+
+          cb(null, prev + patch);
+        },
+        differ: function (before, after, cb) {
+          cb(null, after - before);
+        }
+      });
+
+      s.patch = curry(s.patch);
+      s.delta = curry(s.delta);
+      s.collectDeltas = curry(s.collectDeltas);
+      s.size = curry(s.size);
+
+      s.on('ready', function () {
+        done();
+      });
+    });
+
     beforeEach(patchN1s(100));
 
     it('sends first delta without having to write to it first', function (done) {
