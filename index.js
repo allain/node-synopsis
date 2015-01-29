@@ -268,7 +268,11 @@ function Synopsis(options) {
         snapshot(idx1, cb);
       }
     }, function (err, result) {
+      if(err) return cb(err);
+
       async.reduce(result.deltas, result.start, patcher, function (err, end) {
+        if (err) return cb(err);
+
         differ(result.start, end, cb);
       });
     });
