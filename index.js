@@ -122,13 +122,13 @@ function Synopsis(options) {
       var aggregates = {};
       async.eachSeries(scales, function(scale, cb) {
         async.waterfall([
-					function(cb) {
-						snapshot(count - scale, cb);
-					},
-					function(before, cb) {
-						differ(before, after, cb);
-					}
-				], function(err, diff) {
+     function(cb) {
+            snapshot(count - scale, cb);
+     },
+     function(before, cb) {
+            differ(before, after, cb);
+     }
+    ], function(err, diff) {
           if (err) return cb(err);
 
           aggregates[count + '-' + scale] = diff;
