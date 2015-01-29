@@ -8,6 +8,10 @@ module.exports = function (options) {
     set: function (key, value, cb) {
       cache[key] = value;
       cb();
+    },
+    remove: function (key, cb) {
+      delete cache[key];
+      cb();
     }
   };
 };
