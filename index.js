@@ -78,7 +78,7 @@ function Synopsis(options) {
     async.series([
       function (cb) {
         store.set((count + 1) + '-1', delta, cb);
-   },
+      },
       function (cb) {
         updateAggregates(delta, count + 1, cb);
       }
@@ -122,11 +122,11 @@ function Synopsis(options) {
     async.waterfall([
       function (cb) {
         snapshot(count - 1, cb);
-   },
+      },
       function (prevSnapshot, cb) {
         patcher(prevSnapshot, delta, cb);
-   }
-  ], function (err, after) {
+      }
+    ], function (err, after) {
       if (err) return cb(err);
 
       var scales = [];
