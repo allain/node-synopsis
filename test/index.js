@@ -20,7 +20,7 @@ function expectStream(expected, done) {
       assert(false, 'write occurred after no writes expected');
     }
 
-		var expectedChunk = expected.shift();
+    var expectedChunk = expected.shift();
     assert.deepEqual(chunk, expectedChunk);
 
     if (expected.length === 0) {
@@ -28,7 +28,7 @@ function expectStream(expected, done) {
         done();
       }, 10);
     }
-    
+
     cb();
   };
 
@@ -505,8 +505,8 @@ describe('Synopsis', function() {
     it('a failing patch causes a notification to be emitted', function(done) {
       s.createStream(100, function(err, stream) {
         if (err) {
-           assert.fail('no exception expected here');
-				}
+          assert.fail('no exception expected here');
+        }
         stream.pipe(expectStream([{
           error: 'patch failed',
           patch: -2,

@@ -30,32 +30,7 @@ function Synopsis(options) {
   var differ = options.differ;
   var patcher = options.patcher;
 
-  var store = options.store || require('./stores/memory')();
-
-  if (!store.setAll) {
-    store.setAll = function(map, cb) {
-      async.eachSeries(Object.keys(map), function(key, cb) {
-        store.set(key, map[key], cb);
-      }, cb);
-    };
-  }
-
-  if (!store.getAll) {
-    store.getAll = function(keys, cb) {
-      var result = {};
-      async.eachSeries(keys, function(key, cb) {
-        store.get(key, function(err, val) {
-          if (err) return cb(err);
-
-          result[key] = val;
-
-          cb();
-        });
-      }, function(err) {
-        cb(err, result);
-      });
-    };
-  }
+  var store = decorateStore(options.store || require('./stores/memory')());
 
   function snapshot(index, cb) {
     if (typeof cb === 'undefined') {
@@ -135,26 +110,26 @@ function Synopsis(options) {
       if (err) return cb(err);
 
       patcher(prevSum, delta, function(err, after) {
-				if(err) return cb(err);
-				async.whilst(function() {
-					return scale <= count && count % scale === 0;
-				}, function(next) {
-					snapshot(count - scale, function(err, before) {
-						if (err) return next(err);
+        if (err) return cb(err);
+        async.whilst(function() {
+          return scale <= count && count % scale === 0;
+        }, function(next) {
+          snapshot(count - scale, function(err, before) {
+            if (err) return next(err);
 
-						differ(before, after, function(err, diff) {
-							if (err) return next(err);
+            differ(before, after, function(err, diff) {
+              if (err) return next(err);
 
-							store.set(count + '-' + scale, diff, function(err) {
-								if (err) return next(err);
+              store.set(count + '-' + scale, diff, function(err) {
+                if (err) return next(err);
 
-								scale *= granularity;
-								next();
-							});
-						});
-					});
-				}, cb);
-			});
+                scale *= granularity;
+                next();
+              });
+            });
+          });
+        }, cb);
+      });
     });
   }
 
@@ -218,15 +193,15 @@ function Synopsis(options) {
 
         var result = start;
 
-				async.eachSeries(deltas, function(delta, cb) {
+        async.eachSeries(deltas, function(delta, cb) {
           patcher(result, delta, function(err, newResult) {
-						if (err) return cb(err);
+            if (err) return cb(err);
             result = newResult;
             cb();
-					});
-				}, function(err) {
+          });
+        }, function(err) {
           differ(start, result, cb);
-				});
+        });
       });
     });
   }
@@ -268,29 +243,29 @@ function Synopsis(options) {
       // in the event that the stream is too slow to keep up.
       // It should compute the best delta when that happens
 
-			var flowing = false;
+      var flowing = false;
       var pendingPatches = [];
 
       self.on('patched', function(patch) {
         if (flowing) {
-					flowing = stream.push([patch, count]);
-				} else {
-					pendingPatches.push(count);	
-				}
+          flowing = stream.push([patch, count]);
+        } else {
+          pendingPatches.push(count);
+        }
       });
 
       stream._read = function() {
         flowing = true;
-				if (pendingPatches.length) {
-					var last = pendingPatches[pendingPatches.length - 1];
-					self.delta(pendingPatches[0] - 1, count, function(err, delta) {
-						flowing = stream.push([delta, last]);
+        if (pendingPatches.length) {
+          var last = pendingPatches[pendingPatches.length - 1];
+          self.delta(pendingPatches[0] - 1, count, function(err, delta) {
+            flowing = stream.push([delta, last]);
             if (flowing) {
-							pendingPatches = [];
-						}
-					});
-				}
-			};
+              pendingPatches = [];
+            }
+          });
+        }
+      };
 
       stream._write = function(chunk, encoding, next) {
         self.patch(chunk, function(err) {
@@ -327,4 +302,33 @@ function Synopsis(options) {
   this.collectDeltas = collectDeltas;
   this.size = size;
   this.createStream = createStream;
+}
+
+function decorateStore(store) {
+  if (!store.setAll) {
+    store.setAll = function(map, cb) {
+      async.eachSeries(Object.keys(map), function(key, cb) {
+        store.set(key, map[key], cb);
+      }, cb);
+    };
+  }
+
+  if (!store.getAll) {
+    store.getAll = function(keys, cb) {
+      var result = {};
+      async.eachSeries(keys, function(key, cb) {
+        store.get(key, function(err, val) {
+          if (err) return cb(err);
+
+          result[key] = val;
+
+          cb();
+        });
+      }, function(err) {
+        cb(err, result);
+      });
+    };
+  }
+
+  return store;
 }
