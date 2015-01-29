@@ -286,6 +286,11 @@ function Synopsis(options) {
 
     if (startIndex === head) {
       streamPatches();
+    } else if (startIndex < tail) {
+      delta(tail, head, function (err, patch) {
+        stream.push([patch, head, 'reset']);
+        streamPatches();
+      });
     } else {
       delta(startIndex, head, function (err, patch) {
         stream.push([patch, head]);

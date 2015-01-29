@@ -6,6 +6,8 @@ var Duplex = require('stream').Duplex;
 var Synopsis = require('../index.js');
 var Writable = require('stream').Writable;
 
+var aassert = require('./async-assert');
+
 function expectStream(expected, done) {
   assert(Array.isArray(expected));
 
@@ -78,6 +80,56 @@ describe('streaming', function () {
         done();
       });
     });
+  });
+
+  it('sends full patch if handshake is older than tail', function (done) {
+    s = new Synopsis({
+      start: 0,
+      granularity: 5,
+      patcher: function (prev, patch, cb) {
+        if (patch === -2 /** Arbitrary to test failures */ ) {
+          return cb(new Error('Invalid Patch'));
+        }
+
+        cb(null, prev + patch);
+      },
+      differ: function (before, after, cb) {
+        cb(null, after - before);
+      }
+    });
+
+    s.patch = curry(s.patch);
+    s.delta = curry(s.delta);
+    s.collectDeltas = curry(s.collectDeltas);
+    s.compact = curry(s.compact);
+    s.stats = curry(s.stats);
+
+    s.on('ready', function () {
+      async.series([
+        s.patch(1),
+        s.patch(1),
+        s.patch(1),
+        s.patch(1),
+        s.patch(1),
+        s.compact(),
+        s.compact(),
+        s.compact(),
+        s.compact(),
+        s.patch(1),
+        aassert.deepEqual(s.stats(), {
+          head: 6,
+          tail: 4
+        })
+      ], function (err) {
+        assert(!err, err);
+        s.createStream(2, function (err, stream) {
+          stream.pipe(expectStream([
+            [6, 6, 'reset']
+          ], done));
+        });
+      });
+    });
+
   });
 
   it('sends no updates unless changes occur', function (done) {

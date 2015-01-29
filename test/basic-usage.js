@@ -35,6 +35,7 @@ describe('basic usage', function () {
     s.delta = curry(s.delta);
     s.collectDeltas = curry(s.collectDeltas);
     s.stats = curry(s.stats);
+
     s.compact = curry(s.compact);
 
     s.on('ready', function () {
