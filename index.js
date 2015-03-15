@@ -4,6 +4,8 @@ var assert = require('assert');
 var async = require('async');
 var values = require('amp-values');
 var Duplex = require('stream').Duplex;
+var Promise = require('bluebird');
+
 var EventEmitter = require('events').EventEmitter;
 
 var decorateStore = require('./stores/decorator.js');

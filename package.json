@@ -19,6 +19,7 @@
   "dependencies": {
     "amp-values": "^1.0.1",
     "async": "^0.9.0",
+    "bluebird": "^2.9.14",
     "lodash.curry": "^3.0.0",
     "node-lru": "0.0.2"
   },
