@@ -16,7 +16,6 @@ module.exports = function (options) {
       delete cache[key];
       cb();
     },
-
     dump: function (label) {
       console.log(label, cache);
     }

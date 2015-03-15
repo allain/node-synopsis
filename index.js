@@ -6,6 +6,8 @@ var values = require('amp-values');
 var Duplex = require('stream').Duplex;
 var EventEmitter = require('events').EventEmitter;
 
+var decorateStore = require('./stores/decorator.js');
+
 var inherits = require('util').inherits;
 
 inherits(Synopsis, EventEmitter);
@@ -19,55 +21,71 @@ function Synopsis(options) {
 
   EventEmitter.call(this);
 
-  assert(typeof options === 'object');
-
-  var patcher = options.patcher;
-  var differ = options.differ;
-
-  var granularity = options.granularity || 5;
-
   var head;
   var tail;
-
   var emptyPatch;
   var emptyPatchJson;
 
+  var patcher = options.patcher;
+  var differ = options.differ;
+  var granularity = options.granularity || 5;
+  var store = decorateStore(options.store || require('./stores/memory')());
+
+  // exists so that only 1 change operation can be done at a time
+  var changeQueue = async.queue(function (task, cb) {
+    return task(cb);
+  }, 1);
+
+  // Compute what the empty patch looks like
   differ(options.start, options.start, function (err, patch) {
     emptyPatch = patch;
     emptyPatchJson = JSON.stringify(patch);
   });
 
-  var deltaCache = this.deltaCache = {};
-
-  var store = decorateStore(options.store || require('./stores/memory')());
-
   function getInterval(intervalKey, cb) {
     store.get(intervalKey, function (err, p) {
       if (err) return cb(err);
 
-      if (p) {
-        cb(null, p);
-      } else {
-        cb(null, emptyPatch);
-      }
+      cb(null, p || emptyPatch);
     });
   }
 
-  function setInterval(intervalKey, value, cb) {
+  function getIntervals(intervalKeys, cb) {
+    store.getAll(intervalKeys, function(err, map) {
+      if (err) return cb(err);
+
+      Object.keys(map).forEach(function(key) {
+        map[key] = map[key] || emptyPatch;
+      });
+
+      return cb(null, map);
+    });
+  }
+
+  var setInterval = function(intervalKey, value, cb) {
     if (JSON.stringify(value) === emptyPatchJson) {
       store.remove(intervalKey, cb);
     } else {
       store.set(intervalKey, value, cb);
     }
+  };
+
+  function setIntervals(intervalsMap, cb) {
+    Object.keys(intervalsMap).forEach(function(interval) {
+      var patch = intervalsMap[interval];
+      if (JSON.stringify(patch) === emptyPatchJson) {
+        intervalsMap[interval] = undefined;
+      }
+    });
+
+    store.putAll(intervalsMap, cb);
   }
 
   function snapshot(index, cb) {
-    if (typeof cb === 'undefined') {
+    if (!cb) {
       cb = index;
       index = head;
-    }
-
-    if (typeof index === 'undefined') {
+    } else if (typeof index === 'undefined') {
       index = head;
     }
 
@@ -78,72 +96,32 @@ function Synopsis(options) {
     delta(0, index, function (err, d) {
       if (err) return cb(err);
 
-      setImmediate(function () {
-        patcher(options.start, d, cb);
-      });
+      patcher(options.start, d, cb);
     });
   }
 
-  //exists so that only 1 scary operation can be done at a time
-  var workQueue = async.queue(function (task, cb) {
-    var patch = task.patch;
-
-    if (patch) {
-      async.series([
-        function (cb) {
-          setInterval((head + 1) + '-1', patch, cb);
-        },
-        function (cb) {
-          computeAggregates(patch, head + 1, cb);
-        }
-      ], function (err) {
-        if (err) return cb(err);
-
-        store.set('head', ++head, function (err) {
-          self.emit('patched', patch);
-          cb();
-        });
-      });
-    } else if (task.compact) {
-      tail++;
-
-      delta(tail - 1, tail + 1, function (err, delta) {
-        store.set((tail + 1) + '-1', delta, function (err) {
-          store.remove(tail + '-1', function (err) {
-            updateAggregates(tail, function (err) {
-              updateAggregates(tail + 1, function (err) {
-                var indexes = {};
-                var scale = granularity;
-                var nextIndex;
-
-                while (scale <= head) {
-                  nextIndex = Math.ceil((tail + 1) / scale) * scale;
-                  if (nextIndex > head) break;
-                  indexes[nextIndex] = true;
-                  scale *= granularity;
-                }
-
-                async.eachSeries(Object.keys(indexes), updateAggregates, function (err) {
-                  store.set('tail', tail, cb);
-                });
-              });
-            });
-          });
-        });
-      });
-    }
-  }, 1);
-
   function patch(delta, cb) {
-    testNewPatch(delta, applyPatch);
-
-    function applyPatch(err) {
+    testNewPatch(delta, function(err) {
       if (err) return cb(err);
 
-      workQueue.push({
-        patch: delta
+      changeQueue.push(function(cb) {
+        async.series([
+          function(cb) {
+            setInterval((head + 1) + '-1', delta, cb);
+          },
+          function(cb) {
+            computeAggregates(delta, head + 1, cb);
+          }
+        ], function (err) {
+          if (err) return cb(err);
+
+          store.set('head', ++head, function (err) {
+            self.emit('patched', delta);
+            cb();
+          });
+        });
       }, cb);
-    }
+    });
   }
 
   function testNewPatch(patch, cb) {
@@ -154,7 +132,7 @@ function Synopsis(options) {
     });
   }
 
-  function computeAggregates(delta, index, cb) {
+  var computeAggregates = function(delta, index, cb) {
     var scale = granularity;
 
     if (scale > index || index % scale !== 0) {
@@ -162,7 +140,7 @@ function Synopsis(options) {
     }
 
     async.waterfall([
-      function (cb) {
+      function(cb) {
         snapshot(index - 1, cb);
       },
       function (prevSnapshot, cb) {
@@ -178,7 +156,8 @@ function Synopsis(options) {
         scale *= granularity;
       }
 
-      var aggregates = {};
+      var intervalChanges = {};
+
       async.eachSeries(scales, function (scale, cb) {
         snapshot(index - scale, function (err, before) {
           if (err) return cb(err);
@@ -186,18 +165,66 @@ function Synopsis(options) {
           differ(before, after, function (err, diff) {
             if (err) return cb(err);
 
-            setInterval(index + '-' + scale, diff, cb);
+            intervalChanges[index + '-' + scale] = diff;
+            cb();
           });
         });
-      }, cb);
-    });
-  }
+      }, function(err) {
+        if (err) return cb(err);
 
-  function updateAggregates(index, cb) {
+        setIntervals(intervalChanges, cb);
+      });
+    });
+  };
+
+  var updateAggregates = function(index, cb) {
     getInterval(index + '-1', function (err, patch) {
       computeAggregates(patch, index, cb);
     });
+  };
+
+  function delta(idx1, idx2, cb) {
+    if (typeof cb === 'undefined') {
+      cb = idx2;
+      idx2 = head;
+    }
+
+    if (idx1 === idx2) {
+      return cb(null, emptyPatch);
+    }
+
+    assert(typeof cb === 'function');
+
+    async.parallel({
+      deltas: function(cb) {
+        collectDeltas(idx1, idx2, cb);
+      },
+      start: function(cb) {
+        snapshot(idx1, cb);
+      }
+    }, function (err, result) {
+      if(err) return cb(err);
+
+      async.reduce(result.deltas, result.start, patcher, function (err, end) {
+        if (err) return cb(err);
+
+        differ(result.start, end, cb);
+      });
+    });
   }
+
+  var collectDeltas = function(idx1, idx2, cb) {
+    if (idx2 > head) return cb(new Error('index out of range: ' + idx2));
+    if (idx1 > idx2) return cb(new Error('delta in incorrect order: ' + idx1 + ' > ' + idx2));
+
+    if (idx1 === idx2) return cb(null, []);
+
+    getIntervals(computeIntervalKeys(idx1, idx2), function(err, intervals) {
+      if (err) return cb(err);
+
+      cb(null, values(intervals));
+    });
+  };
 
   function computeIntervalKeys(idx1, idx2) {
     var idx = idx2;
@@ -229,54 +256,6 @@ function Synopsis(options) {
 
     return keys.reverse();
   }
-
-  var collectDeltas = function (idx1, idx2, cb) {
-    if (idx2 > head) return cb(new Error('index out of range: ' + idx2));
-    if (idx1 > idx2) return cb(new Error('delta in incorrect order: ' + idx1 + ' > ' + idx2));
-
-    if (idx1 === idx2) return cb(null, []);
-
-    var keys = computeIntervalKeys(idx1, idx2);
-
-    async.reduce(keys, [], function (deltas, key, cb) {
-      getInterval(key, function (err, delta) {
-        deltas.push(delta);
-        cb(null, deltas);
-      });
-    }, function (err, deltas) {
-      cb(err, deltas);
-    });
-  };
-
-  var delta = function (idx1, idx2, cb) {
-    if (typeof cb === 'undefined') {
-      cb = idx2;
-      idx2 = head;
-    }
-
-    if (idx1 === idx2) {
-      return cb(null, emptyPatch);
-    }
-
-    assert(typeof cb === 'function');
-
-    async.parallel({
-      deltas: function (cb) {
-        collectDeltas(idx1, idx2, cb);
-      },
-      start: function (cb) {
-        snapshot(idx1, cb);
-      }
-    }, function (err, result) {
-      if(err) return cb(err);
-
-      async.reduce(result.deltas, result.start, patcher, function (err, end) {
-        if (err) return cb(err);
-
-        differ(result.start, end, cb);
-      });
-    });
-  };
 
   function createStream(startIndex, cb) {
     if (typeof cb === 'undefined') {
@@ -355,24 +334,53 @@ function Synopsis(options) {
       return cb();
     }
 
-    workQueue.push({
-      compact: 1
+    changeQueue.push(function(cb) {
+      tail ++;
+
+      delta(tail - 1, tail + 1, function (err, delta) {
+        async.series([
+          function(cb) {
+            var change = {};
+            change[(tail + 1) + '-1'] = delta;
+            change[tail + '-1'] = undefined;
+            store.putAll(change, cb);
+          },
+          function(cb) {
+            updateAggregates(tail, cb);
+          },
+          function(cb) {
+            updateAggregates(tail + 1, cb);
+          }
+        ], function(err) {
+          if (err) return cb(err);
+          var indexes = {};
+          var scale = granularity;
+          var nextIndex;
+
+          while (scale <= head) {
+            nextIndex = Math.ceil((tail + 1) / scale) * scale;
+            if (nextIndex > head) break;
+            indexes[nextIndex] = true;
+            scale *= granularity;
+          }
+
+          async.eachSeries(Object.keys(indexes), updateAggregates, function (err) {
+            store.set('tail', tail, cb);
+          });
+        });
+      });
     }, cb);
   }
 
   function stats(cb) {
-    async.parallel({
-      head: function (cb) {
-        store.get('head', function (err, h) {
-          cb(err, h || 0);
-        });
-      },
-      tail: function (cb) {
-        store.get('tail', function (err, t) {
-          cb(err, t || 0);
-        });
-      }
-    }, cb);
+    store.getAll(['head', 'tail'], function(err, s) {
+      if (err) return cb(err);
+
+      s.head = s.head || 0;
+      s.tail = s.tail || 0;
+
+      cb(null, s);
+    });
   }
 
   stats(function (err, s) {
@@ -391,16 +399,4 @@ function Synopsis(options) {
   this.stats = stats;
   this.createStream = createStream;
   this.compact = compact;
-}
-
-function decorateStore(store) {
-  if (!store.setAll) {
-    store.setAll = function (map, cb) {
-      async.eachSeries(Object.keys(map), function (key, cb) {
-        store.set(key, map[key], cb);
-      }, cb);
-    };
-  }
-
-  return store;
 }
