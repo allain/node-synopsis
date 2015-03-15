@@ -1,10 +1,9 @@
 module.exports = Synopsis;
 
 var assert = require('assert');
-var async = require('async');
+var async = require('neo-async');
 var values = require('amp-values');
 var Duplex = require('stream').Duplex;
-var Promise = require('bluebird');
 
 var EventEmitter = require('events').EventEmitter;
 

@@ -1,5 +1,5 @@
 var assert = require('assert');
-var async = require('async');
+var async = require('neo-async');
 var curry = require('curry');
 var range = require('amp-range');
 var aassert = require('./async-assert.js');

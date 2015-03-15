@@ -1,4 +1,4 @@
-var async = require('async');
+var async = require('neo-async');
 
 module.exports = function(store) {
   if (!store.setAll) {
