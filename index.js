@@ -3,6 +3,7 @@ module.exports = Synopsis;
 var assert = require('assert');
 var async = require('neo-async');
 var values = require('amp-values');
+var mapIn = require('map-in');
 var Duplex = require('stream').Duplex;
 
 var EventEmitter = require('events').EventEmitter;
@@ -43,43 +44,38 @@ function Synopsis(options) {
     emptyPatchJson = JSON.stringify(patch);
   });
 
-  function getInterval(intervalKey, cb) {
-    store.get(intervalKey, function (err, p) {
+  function getDelta(deltaKey, cb) {
+    store.get(deltaKey, function (err, p) {
       if (err) return cb(err);
 
       cb(null, p || emptyPatch);
     });
   }
 
-  function getIntervals(intervalKeys, cb) {
-    store.getAll(intervalKeys, function(err, map) {
+  function getDeltas(deltaKeys, cb) {
+    store.getAll(deltaKeys, function (err, map) {
       if (err) return cb(err);
 
-      Object.keys(map).forEach(function(key) {
-        map[key] = map[key] || emptyPatch;
-      });
-
-      return cb(null, map);
+      cb(null, mapIn(map, function (patch) {
+        return patch || emptyPatch;
+      }));
     });
   }
 
-  var setInterval = function(intervalKey, value, cb) {
+  function storeDelta(deltaKey, value, cb) {
     if (JSON.stringify(value) === emptyPatchJson) {
-      store.remove(intervalKey, cb);
+      store.remove(deltaKey, cb);
     } else {
-      store.set(intervalKey, value, cb);
+      store.set(deltaKey, value, cb);
     }
-  };
+  }
 
-  function setIntervals(intervalsMap, cb) {
-    Object.keys(intervalsMap).forEach(function(interval) {
-      var patch = intervalsMap[interval];
-      if (JSON.stringify(patch) === emptyPatchJson) {
-        intervalsMap[interval] = undefined;
+  function storeDeltas(deltaMap, cb) {
+    store.putAll(mapIn(deltaMap, function (patch) {
+      if (JSON.stringify(patch) !== emptyPatchJson) {
+        return patch;
       }
-    });
-
-    store.putAll(intervalsMap, cb);
+    }), cb);
   }
 
   function snapshot(index, cb) {
@@ -102,15 +98,15 @@ function Synopsis(options) {
   }
 
   function patch(delta, cb) {
-    testNewPatch(delta, function(err) {
+    testNewPatch(delta, function (err) {
       if (err) return cb(err);
 
-      changeQueue.push(function(cb) {
+      changeQueue.push(function (cb) {
         async.series([
-          function(cb) {
-            setInterval((head + 1) + '-1', delta, cb);
+          function (cb) {
+            storeDelta((head + 1) + '-1', delta, cb);
           },
-          function(cb) {
+          function (cb) {
             computeAggregates(delta, head + 1, cb);
           }
         ], function (err) {
@@ -133,7 +129,7 @@ function Synopsis(options) {
     });
   }
 
-  var computeAggregates = function(delta, index, cb) {
+  var computeAggregates = function (delta, index, cb) {
     var scale = granularity;
 
     if (scale > index || index % scale !== 0) {
@@ -141,7 +137,7 @@ function Synopsis(options) {
     }
 
     async.waterfall([
-      function(cb) {
+      function (cb) {
         snapshot(index - 1, cb);
       },
       function (prevSnapshot, cb) {
@@ -157,29 +153,29 @@ function Synopsis(options) {
         scale *= granularity;
       }
 
-      var intervalChanges = {};
+      //var deltaChanges = {};
 
-      async.eachSeries(scales, function (scale, cb) {
+      async.reduce(scales, {}, function (deltaChanges, scale, cb) {
         snapshot(index - scale, function (err, before) {
           if (err) return cb(err);
 
           differ(before, after, function (err, diff) {
             if (err) return cb(err);
 
-            intervalChanges[index + '-' + scale] = diff;
-            cb();
+            deltaChanges[index + '-' + scale] = diff;
+            cb(null, deltaChanges);
           });
         });
-      }, function(err) {
+      }, function (err, deltaChanges) {
         if (err) return cb(err);
 
-        setIntervals(intervalChanges, cb);
+        storeDeltas(deltaChanges, cb);
       });
     });
   };
 
-  var updateAggregates = function(index, cb) {
-    getInterval(index + '-1', function (err, patch) {
+  var updateAggregates = function (index, cb) {
+    getDelta(index + '-1', function (err, patch) {
       computeAggregates(patch, index, cb);
     });
   };
@@ -196,45 +192,42 @@ function Synopsis(options) {
 
     assert(typeof cb === 'function');
 
-    async.parallel({
-      deltas: function(cb) {
-        collectDeltas(idx1, idx2, cb);
-      },
-      start: function(cb) {
-        snapshot(idx1, cb);
-      }
-    }, function (err, result) {
-      if(err) return cb(err);
+    collectDeltas(idx1, idx2, function (err, deltas) {
+      if (err) return cb(err);
 
-      async.reduce(result.deltas, result.start, patcher, function (err, end) {
+      snapshot(idx1, function (err, start) {
         if (err) return cb(err);
 
-        differ(result.start, end, cb);
+        async.reduce(deltas, start, patcher, function (err, end) {
+          if (err) return cb(err);
+
+          differ(start, end, cb);
+        });
       });
     });
   }
 
-  var collectDeltas = function(idx1, idx2, cb) {
+  var collectDeltas = function (idx1, idx2, cb) {
     if (idx2 > head) return cb(new Error('index out of range: ' + idx2));
     if (idx1 > idx2) return cb(new Error('delta in incorrect order: ' + idx1 + ' > ' + idx2));
 
     if (idx1 === idx2) return cb(null, []);
 
-    getIntervals(computeIntervalKeys(idx1, idx2), function(err, intervals) {
+    getDeltas(computeDeltaKeys(idx1, idx2), function (err, deltas) {
       if (err) return cb(err);
 
-      cb(null, values(intervals));
+      cb(null, values(deltas));
     });
   };
 
-  function computeIntervalKeys(idx1, idx2) {
+  function computeDeltaKeys(idx1, idx2) {
     var idx = idx2;
 
     var keys = [];
 
     while (idx > idx1 && idx !== 0) {
       if (idx % granularity !== 0) {
-        keys.push(idx--+'-1');
+        keys.push(idx-- + '-1');
         continue;
       }
 
@@ -272,11 +265,15 @@ function Synopsis(options) {
       streamPatches();
     } else if (startIndex < tail) {
       delta(tail, head, function (err, patch) {
+        if (err) return cb(err);
+
         stream.push([patch, head, 'reset']);
         streamPatches();
       });
     } else {
       delta(startIndex, head, function (err, patch) {
+        if (err) return cb(err);
+
         stream.push([patch, head]);
         streamPatches();
       });
@@ -335,25 +332,26 @@ function Synopsis(options) {
       return cb();
     }
 
-    changeQueue.push(function(cb) {
-      tail ++;
+    changeQueue.push(function (cb) {
+      tail++;
 
       delta(tail - 1, tail + 1, function (err, delta) {
         async.series([
-          function(cb) {
+          function (cb) {
             var change = {};
             change[(tail + 1) + '-1'] = delta;
             change[tail + '-1'] = undefined;
             store.putAll(change, cb);
           },
-          function(cb) {
+          function (cb) {
             updateAggregates(tail, cb);
           },
-          function(cb) {
+          function (cb) {
             updateAggregates(tail + 1, cb);
           }
-        ], function(err) {
+        ], function (err) {
           if (err) return cb(err);
+
           var indexes = {};
           var scale = granularity;
           var nextIndex;
@@ -374,7 +372,7 @@ function Synopsis(options) {
   }
 
   function stats(cb) {
-    store.getAll(['head', 'tail'], function(err, s) {
+    store.getAll(['head', 'tail'], function (err, s) {
       if (err) return cb(err);
 
       s.head = s.head || 0;
@@ -396,7 +394,7 @@ function Synopsis(options) {
   this.delta = delta;
   this.patch = patch;
   this.collectDeltas = collectDeltas;
-  this.computeIntervalKeys = computeIntervalKeys;
+  this.computeDeltaKeys = computeDeltaKeys;
   this.stats = stats;
   this.createStream = createStream;
   this.compact = compact;

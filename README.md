@@ -62,6 +62,7 @@ var s = new Synopsis({
     // optional (will call the above multiple times if these are not defined)
     // getAll: function(keys, callback) { ... batch get hash ... }
     // setAll: function(obj, callback) { ... batch set  ... }
+    // putAll: function(obj, callback) { ... like setAll, but undefined values are deleted ... }
   }
 });
 ```

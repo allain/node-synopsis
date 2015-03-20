@@ -1,5 +1,9 @@
 var async = require('neo-async');
 
+/**
+ * Patches the given stores so that they have all of the expected methods
+ * by using the mandatory ones `set` and `get`
+ */
 module.exports = function(store) {
   if (!store.setAll) {
     store.setAll = function (map, cb) {

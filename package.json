@@ -20,6 +20,7 @@
     "amp-values": "^1.0.1",
     "bluebird": "^2.9.14",
     "lodash.curry": "^3.0.0",
+    "map-in": "^1.0.1",
     "neo-async": "^0.6.3",
     "node-lru": "0.0.2"
   },
