@@ -34,18 +34,18 @@ function Synopsis(options) {
   var store = decorateStore(options.store || require('./stores/memory')());
 
   // exists so that only 1 change operation can be done at a time
-  var changeQueue = async.queue(function (task, cb) {
+  var changeQueue = async.queue(function(task, cb) {
     return task(cb);
   }, 1);
 
   // Compute what the empty patch looks like
-  differ(options.start, options.start, function (err, patch) {
+  differ(options.start, options.start, function(err, patch) {
     emptyPatch = patch;
     emptyPatchJson = JSON.stringify(patch);
   });
 
   function getDelta(deltaKey, cb) {
-    store.get(deltaKey, function (err, p) {
+    store.get(deltaKey, function(err, p) {
       if (err) return cb(err);
 
       cb(null, p || emptyPatch);
@@ -53,10 +53,10 @@ function Synopsis(options) {
   }
 
   function getDeltas(deltaKeys, cb) {
-    store.getAll(deltaKeys, function (err, map) {
+    store.getAll(deltaKeys, function(err, map) {
       if (err) return cb(err);
 
-      cb(null, mapIn(map, function (patch) {
+      cb(null, mapIn(map, function(patch) {
         return patch || emptyPatch;
       }));
     });
@@ -71,7 +71,7 @@ function Synopsis(options) {
   }
 
   function storeDeltas(deltaMap, cb) {
-    store.putAll(mapIn(deltaMap, function (patch) {
+    store.putAll(mapIn(deltaMap, function(patch) {
       if (JSON.stringify(patch) !== emptyPatchJson) {
         return patch;
       }
@@ -90,7 +90,7 @@ function Synopsis(options) {
       return cb(null, options.start);
     }
 
-    delta(0, index, function (err, d) {
+    delta(0, index, function(err, d) {
       if (err) return cb(err);
 
       patcher(options.start, d, cb);
@@ -98,21 +98,21 @@ function Synopsis(options) {
   }
 
   function patch(delta, cb) {
-    testNewPatch(delta, function (err) {
+    testNewPatch(delta, function(err) {
       if (err) return cb(err);
 
-      changeQueue.push(function (cb) {
+      changeQueue.push(function(cb) {
         async.series([
-          function (cb) {
+          function(cb) {
             storeDelta((head + 1) + '-1', delta, cb);
           },
-          function (cb) {
+          function(cb) {
             computeAggregates(delta, head + 1, cb);
           }
-        ], function (err) {
+        ], function(err) {
           if (err) return cb(err);
 
-          store.set('head', ++head, function (err) {
+          store.set('head', ++head, function(err) {
             self.emit('patched', delta);
             cb();
           });
@@ -122,14 +122,14 @@ function Synopsis(options) {
   }
 
   function testNewPatch(patch, cb) {
-    snapshot(function (err, s) {
+    snapshot(function(err, s) {
       if (err) return cb(err);
 
       patcher(s, patch, cb);
     });
   }
 
-  var computeAggregates = function (delta, index, cb) {
+  var computeAggregates = function(delta, index, cb) {
     var scale = granularity;
 
     if (scale > index || index % scale !== 0) {
@@ -137,13 +137,13 @@ function Synopsis(options) {
     }
 
     async.waterfall([
-      function (cb) {
+      function(cb) {
         snapshot(index - 1, cb);
       },
-      function (prevSnapshot, cb) {
+      function(prevSnapshot, cb) {
         patcher(prevSnapshot, delta, cb);
       }
-    ], function (err, after) {
+    ], function(err, after) {
       if (err) return cb(err);
 
       var scales = [];
@@ -153,20 +153,18 @@ function Synopsis(options) {
         scale *= granularity;
       }
 
-      //var deltaChanges = {};
-
-      async.reduce(scales, {}, function (deltaChanges, scale, cb) {
-        snapshot(index - scale, function (err, before) {
+      async.reduce(scales, {}, function(deltaChanges, scale, cb) {
+        snapshot(index - scale, function(err, before) {
           if (err) return cb(err);
 
-          differ(before, after, function (err, diff) {
+          differ(before, after, function(err, diff) {
             if (err) return cb(err);
 
             deltaChanges[index + '-' + scale] = diff;
             cb(null, deltaChanges);
           });
         });
-      }, function (err, deltaChanges) {
+      }, function(err, deltaChanges) {
         if (err) return cb(err);
 
         storeDeltas(deltaChanges, cb);
@@ -174,11 +172,11 @@ function Synopsis(options) {
     });
   };
 
-  var updateAggregates = function (index, cb) {
-    getDelta(index + '-1', function (err, patch) {
+  function updateAggregates(index, cb) {
+    getDelta(index + '-1', function(err, patch) {
       computeAggregates(patch, index, cb);
     });
-  };
+  }
 
   function delta(idx1, idx2, cb) {
     if (typeof cb === 'undefined') {
@@ -192,13 +190,13 @@ function Synopsis(options) {
 
     assert(typeof cb === 'function');
 
-    collectDeltas(idx1, idx2, function (err, deltas) {
+    collectDeltas(idx1, idx2, function(err, deltas) {
       if (err) return cb(err);
 
-      snapshot(idx1, function (err, start) {
+      snapshot(idx1, function(err, start) {
         if (err) return cb(err);
 
-        async.reduce(deltas, start, patcher, function (err, end) {
+        async.reduce(deltas, start, patcher, function(err, end) {
           if (err) return cb(err);
 
           differ(start, end, cb);
@@ -207,18 +205,18 @@ function Synopsis(options) {
     });
   }
 
-  var collectDeltas = function (idx1, idx2, cb) {
+  function collectDeltas(idx1, idx2, cb) {
     if (idx2 > head) return cb(new Error('index out of range: ' + idx2));
     if (idx1 > idx2) return cb(new Error('delta in incorrect order: ' + idx1 + ' > ' + idx2));
 
     if (idx1 === idx2) return cb(null, []);
 
-    getDeltas(computeDeltaKeys(idx1, idx2), function (err, deltas) {
+    getDeltas(computeDeltaKeys(idx1, idx2), function(err, deltas) {
       if (err) return cb(err);
 
       cb(null, values(deltas));
     });
-  };
+  }
 
   function computeDeltaKeys(idx1, idx2) {
     var idx = idx2;
@@ -264,14 +262,14 @@ function Synopsis(options) {
     if (startIndex === head) {
       streamPatches();
     } else if (startIndex < tail) {
-      delta(tail, head, function (err, patch) {
+      delta(tail, head, function(err, patch) {
         if (err) return cb(err);
 
         stream.push([patch, head, 'reset']);
         streamPatches();
       });
     } else {
-      delta(startIndex, head, function (err, patch) {
+      delta(startIndex, head, function(err, patch) {
         if (err) return cb(err);
 
         stream.push([patch, head]);
@@ -288,7 +286,7 @@ function Synopsis(options) {
       var flowing = false;
       var pendingPatches = [];
 
-      self.on('patched', function (patch) {
+      self.on('patched', function(patch) {
         if (flowing) {
           flowing = stream.push([patch, head]);
         } else {
@@ -296,11 +294,11 @@ function Synopsis(options) {
         }
       });
 
-      stream._read = function () {
+      stream._read = function() {
         flowing = true;
         if (pendingPatches.length) {
           var last = pendingPatches[pendingPatches.length - 1];
-          self.delta(pendingPatches[0] - 1, head, function (err, delta) {
+          self.delta(pendingPatches[0] - 1, head, function(err, delta) {
             flowing = stream.push([delta, last]);
             if (flowing) {
               pendingPatches = [];
@@ -309,8 +307,8 @@ function Synopsis(options) {
         }
       };
 
-      stream._write = function (chunk, encoding, next) {
-        self.patch(chunk, function (err) {
+      stream._write = function(chunk, encoding, next) {
+        self.patch(chunk, function(err) {
           if (err) {
             stream.push({
               error: 'patch failed',
@@ -332,24 +330,24 @@ function Synopsis(options) {
       return cb();
     }
 
-    changeQueue.push(function (cb) {
+    changeQueue.push(function(cb) {
       tail++;
 
-      delta(tail - 1, tail + 1, function (err, delta) {
+      delta(tail - 1, tail + 1, function(err, delta) {
         async.series([
-          function (cb) {
+          function(cb) {
             var change = {};
             change[(tail + 1) + '-1'] = delta;
             change[tail + '-1'] = undefined;
             store.putAll(change, cb);
           },
-          function (cb) {
+          function(cb) {
             updateAggregates(tail, cb);
           },
-          function (cb) {
+          function(cb) {
             updateAggregates(tail + 1, cb);
           }
-        ], function (err) {
+        ], function(err) {
           if (err) return cb(err);
 
           var indexes = {};
@@ -363,7 +361,7 @@ function Synopsis(options) {
             scale *= granularity;
           }
 
-          async.eachSeries(Object.keys(indexes), updateAggregates, function (err) {
+          async.eachSeries(Object.keys(indexes), updateAggregates, function(err) {
             store.set('tail', tail, cb);
           });
         });
@@ -372,7 +370,7 @@ function Synopsis(options) {
   }
 
   function stats(cb) {
-    store.getAll(['head', 'tail'], function (err, s) {
+    store.getAll(['head', 'tail'], function(err, s) {
       if (err) return cb(err);
 
       s.head = s.head || 0;
@@ -382,10 +380,10 @@ function Synopsis(options) {
     });
   }
 
-  stats(function (err, s) {
+  stats(function(err, s) {
     head = s.head;
     tail = s.tail;
-    process.nextTick(function () {
+    process.nextTick(function() {
       self.emit('ready');
     });
   });

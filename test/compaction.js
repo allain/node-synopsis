@@ -6,31 +6,31 @@ var aassert = require('./async-assert.js');
 
 var Synopsis = require('../index.js');
 
-describe('compaction', function () {
+describe('compaction', function() {
   var s;
   var memoryStore;
 
-  var patchN1s = curry(function (n, cb) {
-    async.eachSeries(range(n), function (n, cb) {
+  var patchN1s = curry(function(n, cb) {
+    async.eachSeries(range(n), function(n, cb) {
       s.patch(1, cb);
     }, cb);
   });
 
-  beforeEach(function (done) {
+  beforeEach(function(done) {
     memoryStore = require('../stores/memory')();
     // Uber simple Synopsis example that just calculates the diff
     s = new Synopsis({
       start: 0,
       granularity: 2,
       store: memoryStore,
-      patcher: function (prev, patch, cb) {
-        if (patch === -2 /** Arbitrary to test failures */ ) {
+      patcher: function(prev, patch, cb) {
+        if (patch === -2 /** Arbitrary to test failures */) {
           return cb(new Error('Invalid Patch'));
         }
 
         cb(null, prev + patch);
       },
-      differ: function (before, after, cb) {
+      differ: function(before, after, cb) {
         cb(null, after - before);
       }
     });
@@ -40,22 +40,22 @@ describe('compaction', function () {
     s.collectDeltas = curry(s.collectDeltas);
     s.compact = curry(s.compact);
 
-    s.on('ready', function () {
+    s.on('ready', function() {
       done();
     });
   });
 
-  it('compacting an empty syn dones nothing', function (done) {
-    s.compact(function (err) {
+  it('compacting an empty syn dones nothing', function(done) {
+    s.compact(function(err) {
       assert(!err, 'no error expected');
       done();
     });
   });
 
-  it('compacting a syn with one element does nothing', function (done) {
-    s.patch(1, function () {
-      s.compact(function (err) {
-        s.delta(0, 1, function (err, delta) {
+  it('compacting a syn with one element does nothing', function(done) {
+    s.patch(1, function() {
+      s.compact(function(err) {
+        s.delta(0, 1, function(err, delta) {
           assert.equal(delta, 1);
           done();
         });
@@ -63,9 +63,9 @@ describe('compaction', function () {
     });
   });
 
-  it('compacting a syn updates individual patches', function (done) {
-    patchN1s(2, function () {
-      s.compact(function (err) {
+  it('compacting a syn updates individual patches', function(done) {
+    patchN1s(2, function() {
+      s.compact(function(err) {
         async.parallel([
           aassert.equal(s.delta(0, 1), 0),
           aassert.equal(s.delta(1, 2), 2),
@@ -74,9 +74,9 @@ describe('compaction', function () {
     });
   });
 
-  it('compacting a single time works', function (done) {
-    patchN1s(8, function () {
-      s.compact(function (err) {
+  it('compacting a single time works', function(done) {
+    patchN1s(8, function() {
+      s.compact(function(err) {
         async.parallel([
           aassert.equal(s.delta(0, 2), 2),
           aassert.equal(s.delta(1, 3), 3),
@@ -87,9 +87,9 @@ describe('compaction', function () {
     });
   });
 
-  it('compacting granularity times works to update -1 intervals', function (done) {
-    patchN1s(8, function () {
-      repeat(s.compact(), 2, function (err) {
+  it('compacting granularity times works to update -1 intervals', function(done) {
+    patchN1s(8, function() {
+      repeat(s.compact(), 2, function(err) {
         async.parallel([
           aassert.equal(s.delta(0, 1), 0),
           aassert.equal(s.delta(1, 2), 0),
@@ -101,9 +101,9 @@ describe('compaction', function () {
     });
   });
 
-  it('compacting granularity + 1 times works to update -1 intervals', function (done) {
-    patchN1s(8, function () {
-      repeat(s.compact(), 3, function (err) {
+  it('compacting granularity + 1 times works to update -1 intervals', function(done) {
+    patchN1s(8, function() {
+      repeat(s.compact(), 3, function(err) {
         async.parallel([
           aassert.equal(s.delta(0, 1), 0),
           aassert.equal(s.delta(1, 2), 0),
@@ -115,11 +115,11 @@ describe('compaction', function () {
     });
   });
 
-  it('compacting right up to the end works as expected', function (done) {
-    patchN1s(8, function () {
-      var deltaRange = curry(function (start, end, size, cb) {
-        async.reduce(range(start, end + 1 - size), [], function (deltas, index, cb) {
-          s.delta(index, index + size, function (err, delta) {
+  it('compacting right up to the end works as expected', function(done) {
+    patchN1s(8, function() {
+      var deltaRange = curry(function(start, end, size, cb) {
+        async.reduce(range(start, end + 1 - size), [], function(deltas, index, cb) {
+          s.delta(index, index + size, function(err, delta) {
             deltas.push(delta);
             cb(null, deltas);
           });
@@ -210,7 +210,7 @@ describe('compaction', function () {
 });
 
 function repeat(fn, count, cb) {
-  async.whilst(function () {
+  async.whilst(function() {
     return count-- > 0;
   }, fn, cb);
 }

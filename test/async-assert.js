@@ -3,8 +3,8 @@ var curry = require('curry');
 
 // Little utility that allows me to more easily test async functions
 module.exports = {
-  equal: curry(function (generator, expected, cb) {
-    generator(function (err, actual) {
+  equal: curry(function(generator, expected, cb) {
+    generator(function(err, actual) {
       try {
         assert.equal(actual, expected);
         cb();
@@ -13,8 +13,8 @@ module.exports = {
       }
     });
   }),
-  deepEqual: curry(function (generator, expected, cb) {
-    generator(function (err, actual) {
+  deepEqual: curry(function(generator, expected, cb) {
+    generator(function(err, actual) {
       try {
         assert.equal(JSON.stringify(actual), JSON.stringify(expected));
         cb();
