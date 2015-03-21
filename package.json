@@ -27,7 +27,6 @@
   "devDependencies": {
     "amp-each": "^1.0.1",
     "amp-range": "^1.0.1",
-    "bench-csv": "^1.0.1",
     "curry": "^1.2.0",
     "jiff": "^0.7.0",
     "js-beautify": "^1.5.4",
