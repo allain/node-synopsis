@@ -30,10 +30,11 @@ function Synopsis(options) {
 
   var patcher = options.patcher;
   var differ = options.differ;
+
   var granularity = options.granularity || 5;
   var store = decorateStore(options.store || require('./stores/memory')());
 
-  // exists so that only 1 change operation can be done at a time
+  // exists so that only 1 change operation can be done at a time, includes patches and compactions.
   var changeQueue = async.queue(function(task, cb) {
     return task(cb);
   }, 1);
