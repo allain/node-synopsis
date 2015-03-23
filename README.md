@@ -56,12 +56,14 @@ By doing so, the state of the Synopsis instance can be retained across restarts 
 ``` js
 var s = new Synopsis({
   store: {
+    // get the value of the key in the store, or undefined if it isn't
     get: function(key, callback) { ... },
-    put: function(key, callback) { ... }
+    
+    // associate the value to the key in the store, undefined value is effectively a delete operation
+    put: function(key, value, callback) { ... },
 
-    // optional (will call the above multiple times if these are not defined)
+    // optionally define the following if the store provider has a batch operation for them.
     // getAll: function(keys, callback) { ... batch get hash ... }
-    // setAll: function(obj, callback) { ... batch set  ... }
     // putAll: function(obj, callback) { ... like setAll, but undefined values are deleted ... }
   }
 });

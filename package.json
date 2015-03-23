@@ -1,11 +1,10 @@
 {
   "name": "synopsis",
-  "version": "0.9.3",
+  "version": "0.10.0",
   "description": "Efficiently computes synopsis of delta series.",
   "main": "index.js",
   "scripts": {
-    "test": "node_modules/.bin/mocha test",
-    "format": "find .  -name '*.js' -not -path './node_modules/*' | xargs node_modules/.bin/js-beautify --replace"
+    "test": "node_modules/.bin/mocha test"
   },
   "files": [
     "index.js"
@@ -18,21 +17,14 @@
   "license": "ISC",
   "dependencies": {
     "amp-values": "^1.0.1",
-    "bluebird": "^2.9.14",
-    "lodash.curry": "^3.0.0",
     "map-in": "^1.0.1",
-    "neo-async": "^0.6.3",
-    "node-lru": "0.0.2"
+    "neo-async": "^0.6.3"
   },
   "devDependencies": {
     "amp-each": "^1.0.1",
     "amp-range": "^1.0.1",
     "curry": "^1.2.0",
     "jiff": "^0.7.0",
-    "js-beautify": "^1.5.4",
-    "microtime": "^1.2.0",
-    "mocha": "^2.1.0",
-    "moment": "^2.9.0",
-    "stdout": "0.0.3"
+    "mocha": "^2.1.0"
   }
 }

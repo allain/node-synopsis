@@ -4,7 +4,6 @@ var assert = require('assert');
 var async = require('neo-async');
 var values = require('amp-values');
 var mapIn = require('map-in');
-var Duplex = require('stream').Duplex;
 
 var EventEmitter = require('events').EventEmitter;
 
@@ -232,7 +231,6 @@ function Synopsis(options) {
 
       var deltaSize = idx - idx1;
       var deltaScale = Math.pow(granularity, Math.floor(Math.log(deltaSize) / Math.log(granularity)));
-      var cached;
 
       do {
         if (idx % deltaScale === 0) {
@@ -248,82 +246,6 @@ function Synopsis(options) {
     }
 
     return keys.reverse();
-  }
-
-  function createStream(startIndex, cb) {
-    if (typeof cb === 'undefined') {
-      cb = startIndex;
-      startIndex = 0;
-    }
-
-    var stream = new Duplex({
-      objectMode: true
-    });
-
-    if (startIndex === head) {
-      streamPatches();
-    } else if (startIndex < tail) {
-      delta(tail, head, function(err, patch) {
-        if (err) return cb(err);
-
-        stream.push([patch, head, 'reset']);
-        streamPatches();
-      });
-    } else {
-      delta(startIndex, head, function(err, patch) {
-        if (err) return cb(err);
-
-        stream.push([patch, head]);
-        streamPatches();
-      });
-    }
-
-    function streamPatches() {
-      var lastIndex = head;
-      // Naive push everything approach, it should support pausing then resuming,
-      // in the event that the stream is too slow to keep up.
-      // It should compute the best delta when that happens
-
-      var flowing = false;
-      var pendingPatches = [];
-
-      self.on('patched', function(patch) {
-        if (flowing) {
-          flowing = stream.push([patch, head]);
-        } else {
-          pendingPatches.push(head);
-        }
-      });
-
-      stream._read = function() {
-        flowing = true;
-        if (pendingPatches.length) {
-          var last = pendingPatches[pendingPatches.length - 1];
-          self.delta(pendingPatches[0] - 1, head, function(err, delta) {
-            flowing = stream.push([delta, last]);
-            if (flowing) {
-              pendingPatches = [];
-            }
-          });
-        }
-      };
-
-      stream._write = function(chunk, encoding, next) {
-        self.patch(chunk, function(err) {
-          if (err) {
-            stream.push({
-              error: 'patch failed',
-              patch: chunk,
-              cause: err.message
-            });
-          }
-
-          next();
-        });
-      };
-
-      cb(null, stream);
-    }
   }
 
   function compact(cb) {
@@ -395,6 +317,5 @@ function Synopsis(options) {
   this.collectDeltas = collectDeltas;
   this.computeDeltaKeys = computeDeltaKeys;
   this.stats = stats;
-  this.createStream = createStream;
   this.compact = compact;
 }
